@@ -80,12 +80,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.getHealthDataForRange(userId, startTime, now)
         }
         .flatMapLatest { it } // Flatten the Flow<Flow<List<HealthData>>> to Flow<List<HealthData>>
-        .map {
+        .map { data ->
             val metricType = _historyQuery.value?.first
             if (metricType == null) return@map emptyList<HealthData>()
-            
-            // Filter the data from the DB before showing it, removing entries where the specific metric is null
-            it.filter {
+
+            val filteredData = data.filter {
                 when (metricType) {
                     MetricType.HEART_RATE -> it.heartRate != null
                     MetricType.STEPS -> it.steps != null
@@ -93,6 +92,86 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     MetricType.DISTANCE -> it.distance != null
                     MetricType.SLEEP -> it.sleepDuration != null
                     MetricType.HEART_POINTS -> false // Heart points are disabled
+                }
+            }
+
+            when (metricType) {
+                MetricType.HEART_RATE -> {
+                    filteredData
+                        .groupBy { TimeUnit.MILLISECONDS.toMinutes(it.timestamp) }
+                        .map { (minute, group) ->
+                            val avgHeartRate = group.mapNotNull { it.heartRate }.average().toFloat()
+                            group.first().copy(
+                                heartRate = avgHeartRate,
+                                timestamp = TimeUnit.MINUTES.toMillis(minute) // Use the start of the minute as the timestamp
+                            )
+                        }
+                }
+                MetricType.DISTANCE -> {
+                    val timeRange = _historyQuery.value?.second
+                    if (timeRange == "Today") {
+                        // Aggregate by hour for "Today"
+                        filteredData
+                            .groupBy { TimeUnit.MILLISECONDS.toHours(it.timestamp) }
+                            .map { (hour, group) ->
+                                val totalDistance = group.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
+                                group.first().copy(
+                                    distance = totalDistance,
+                                    timestamp = TimeUnit.HOURS.toMillis(hour)
+                                )
+                            }
+                    } else {
+                        // Aggregate by day for "7 Days" and "30 Days"
+                        filteredData
+                            .groupBy { TimeUnit.MILLISECONDS.toDays(it.timestamp) }
+                            .map { (day, group) ->
+                                val totalDistance = group.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
+                                group.first().copy(
+                                    distance = totalDistance,
+                                    timestamp = TimeUnit.DAYS.toMillis(day)
+                                )
+                            }
+                    }
+                }
+                MetricType.SLEEP -> {
+                    filteredData
+                        .groupBy { 
+                            val cal = Calendar.getInstance()
+                            cal.timeInMillis = it.timestamp
+                            // We consider a "night" to be from noon to noon.
+                            // So if sleep is recorded before noon, it belongs to the previous day's night.
+                            if (cal.get(Calendar.HOUR_OF_DAY) < 12) {
+                                cal.add(Calendar.DATE, -1)
+                            }
+                            // Reset to midnight for consistent grouping, represents the start of the day.
+                            cal.set(Calendar.HOUR_OF_DAY, 0)
+                            cal.set(Calendar.MINUTE, 0)
+                            cal.set(Calendar.SECOND, 0)
+                            cal.set(Calendar.MILLISECOND, 0)
+                            cal.timeInMillis
+                         }
+                        .map { (nightTimestamp, group) ->
+                            val totalSleep = group.sumOf { it.sleepDuration?.toInt() ?: 0 }
+                            // We can take the first entry from the group for other details, but update the key properties
+                            group.first().copy(
+                                sleepDuration = totalSleep.toLong(),
+                                timestamp = nightTimestamp
+                            )
+                        }
+                }
+                MetricType.STEPS -> {
+                    filteredData
+                        .groupBy { TimeUnit.MILLISECONDS.toDays(it.timestamp) }
+                        .map { (day, group) ->
+                            val totalSteps = group.sumOf { it.steps ?: 0 }
+                            group.first().copy(
+                                steps = totalSteps,
+                                timestamp = TimeUnit.DAYS.toMillis(day)
+                            )
+                        }
+                }
+                else -> {
+                    filteredData
                 }
             }
         }
@@ -113,7 +192,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadHistory(metricType: MetricType, timeRange: String) {
-        _historyQuery.value = metricType to timeRange
+        if (metricType == MetricType.SLEEP && timeRange == "Today") {
+            _historyQuery.value = metricType to "7 Days"
+        } else {
+            _historyQuery.value = metricType to timeRange
+        }
     }
 
     private fun getWeeklyData(data: List<HealthData>, format: String, valueSelector: (HealthData) -> Float): List<Pair<String, Float>> {

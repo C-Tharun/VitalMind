@@ -13,20 +13,25 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +51,11 @@ import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.column.columnChart
+import com.patrykandpatrick.vico.compose.style.ProvideChartStyle
 import com.patrykandpatrick.vico.core.axis.AxisPosition
 import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
+import com.patrykandpatrick.vico.core.component.shape.LineComponent
+import com.patrykandpatrick.vico.core.component.shape.Shapes
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.entryOf
 import com.tharun.vitalsync.ui.DashboardState
@@ -55,10 +63,17 @@ import com.tharun.vitalsync.ui.MainViewModel
 import com.tharun.vitalsync.ui.MetricHistoryScreen
 import com.tharun.vitalsync.ui.MetricType
 import com.tharun.vitalsync.ui.theme.VitalSyncTheme
+import com.tharun.vitalsync.ui.theme.rememberChartStyle
 import java.text.SimpleDateFormat
 import java.util.*
 
-data class HealthMetric(val type: MetricType, val value: String, val unit: String, val icon: ImageVector)
+data class HealthMetric(
+    val type: MetricType,
+    val value: String,
+    val unit: String,
+    val icon: ImageVector,
+    val colors: List<Color>
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -67,12 +82,12 @@ class MainActivity : ComponentActivity() {
     private val fitnessOptions: FitnessOptions by lazy {
         FitnessOptions.builder()
             .addDataType(DataType.TYPE_HEART_RATE_BPM, FitnessOptions.ACCESS_READ)
-            .addDataType(DataType.TYPE_STEP_COUNT_DELTA, FitnessOptions.ACCESS_READ) // Required for aggregate steps
+            .addDataType(DataType.TYPE_STEP_COUNT_DELTA, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.AGGREGATE_STEP_COUNT_DELTA, FitnessOptions.ACCESS_READ)
-            .addDataType(DataType.TYPE_CALORIES_EXPENDED, FitnessOptions.ACCESS_READ) // Required for aggregate calories
+            .addDataType(DataType.TYPE_CALORIES_EXPENDED, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.AGGREGATE_CALORIES_EXPENDED, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.TYPE_ACTIVITY_SEGMENT, FitnessOptions.ACCESS_READ)
-            .addDataType(DataType.TYPE_DISTANCE_DELTA, FitnessOptions.ACCESS_READ) // Required for aggregate distance
+            .addDataType(DataType.TYPE_DISTANCE_DELTA, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.AGGREGATE_DISTANCE_DELTA, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.TYPE_SLEEP_SEGMENT, FitnessOptions.ACCESS_READ)
             .build()
@@ -87,7 +102,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
 
                 val activityPermissionLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.RequestPermission()
+                    contract = ActivityResultContracts.RequestPermission(),
                 ) { isGranted ->
                     if (isGranted) {
                         Log.d("MainActivity", "Activity Recognition permission granted.")
@@ -111,18 +126,15 @@ class MainActivity : ComponentActivity() {
                                     Log.d("MainActivity", "Sign-in successful for account: ${account?.email}")
                                     isSignedIn = true
                                     viewModel.setUserIdAndName(account?.id ?: "guest", account?.displayName)
-                                    // Now check for Activity Recognition permission
+
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                        when (PackageManager.PERMISSION_GRANTED) {
-                                            ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) -> {
-                                                viewModel.syncData()
-                                            }
-                                            else -> {
-                                                activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
-                                            }
+                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED) {
+                                            viewModel.syncData()
+                                        } else {
+                                            activityPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                                         }
                                     } else {
-                                        viewModel.syncData() // No runtime permission needed for older versions
+                                        viewModel.syncData()
                                     }
                                 } catch (e: ApiException) {
                                     Log.e("MainActivity", "Sign-In failed after result OK", e)
@@ -148,7 +160,6 @@ class MainActivity : ComponentActivity() {
                             navController = navController
                         )
 
-                        // Check for existing permissions on launch
                         LaunchedEffect(Unit) {
                             val account = GoogleSignIn.getAccountForExtension(context, fitnessOptions)
                             if (account != null && GoogleSignIn.hasPermissions(account, fitnessOptions)) {
@@ -171,26 +182,31 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppScreen(isSignedIn: Boolean, state: DashboardState, onConnectClick: () -> Unit, navController: NavController) {
+fun AppScreen(
+    isSignedIn: Boolean,
+    state: DashboardState,
+    onConnectClick: () -> Unit,
+    navController: NavController
+) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("VitalSync") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("VitalSync") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
     ) {
         padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            AnimatedVisibility(
-                visible = !isSignedIn,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
+            AnimatedVisibility(visible = !isSignedIn) {
                 ConnectScreen(onConnectClick)
             }
-            AnimatedVisibility(
-                visible = isSignedIn,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut() + slideOutVertically()
-            ) {
+            AnimatedVisibility(visible = isSignedIn) {
                 Dashboard(state, navController)
             }
         }
@@ -214,27 +230,26 @@ fun ConnectScreen(onConnectClick: () -> Unit) {
 @Composable
 fun Dashboard(state: DashboardState, navController: NavController) {
     val summaryMetrics = listOfNotNull(
-        HealthMetric(MetricType.HEART_RATE, state.heartRate, "bpm", Icons.Default.Favorite),
-        HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment),
-        HealthMetric(MetricType.STEPS, state.steps, "", Icons.AutoMirrored.Filled.DirectionsWalk),
-        HealthMetric(MetricType.DISTANCE, state.distance, "km", Icons.Default.Map),
-        // HealthMetric(MetricType.HEART_POINTS, state.heartPoints, "pts", Icons.AutoMirrored.Filled.TrendingUp), // Disabled
-        HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime)
+        HealthMetric(MetricType.HEART_RATE, state.heartRate, "bpm", Icons.Default.Favorite, listOf(Color(0xFFF44336), Color(0xFFFFCDD2))),
+        HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, listOf(Color(0xFFFFA726), Color(0xFFFFE0B2))),
+        HealthMetric(MetricType.STEPS, state.steps, "", Icons.AutoMirrored.Filled.DirectionsWalk, listOf(Color(0xFF4CAF50), Color(0xFFC8E6C9))),
+        HealthMetric(MetricType.DISTANCE, state.distance, "km", Icons.Default.Map, listOf(Color(0xFF2196F3), Color(0xFFBBDEFB))),
+        HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, listOf(Color(0xFF9C27B0), Color(0xFFE1BEE7)))
     )
 
-    LazyColumn {
+    LazyColumn(modifier = Modifier.padding(16.dp)) {
         item {
             Greeting(name = state.userName)
+            Spacer(modifier = Modifier.height(24.dp))
+            SectionTitle(title = "Today's Summary", icon = Icons.Default.Analytics)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Today's Summary", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
         }
         item {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(480.dp) 
+                modifier = Modifier.height(380.dp)
             ) {
                 items(summaryMetrics) { metric ->
                     HealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
@@ -242,18 +257,21 @@ fun Dashboard(state: DashboardState, navController: NavController) {
             }
         }
         item {
+            Spacer(modifier = Modifier.height(24.dp))
+            SectionTitle(title = "Last Activity", icon = Icons.Default.History)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Last Activity", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
             LastActivityCard(activity = state.lastActivity, time = state.lastActivityTime)
         }
         item {
+            Spacer(modifier = Modifier.height(24.dp))
+            SectionTitle(title = "Weekly Trends", icon = Icons.Default.ShowChart)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Weekly Trends", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
         }
         item {
             WeeklyChart(state.weeklySteps, "Steps")
+        }
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
         }
         item {
             WeeklyChart(state.weeklyCalories, "Calories")
@@ -262,10 +280,27 @@ fun Dashboard(state: DashboardState, navController: NavController) {
 }
 
 @Composable
+fun SectionTitle(title: String, icon: ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+@Composable
 fun Greeting(name: String) {
-    Column {
-        Text("Good Morning, $name", style = MaterialTheme.typography.headlineMedium)
-        Text(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodyLarge)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer)))
+            .padding(horizontal = 24.dp, vertical = 32.dp)
+    ) {
+        Text("Good Morning,", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary)
+        Text(name, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
     }
 }
 
@@ -273,30 +308,48 @@ fun Greeting(name: String) {
 fun HealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
     Card(
         modifier = Modifier.aspectRatio(1f).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(colors = metric.colors))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(imageVector = metric.icon, contentDescription = metric.type.name, modifier = Modifier.size(36.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = metric.type.name.replaceFirstChar { it.uppercaseChar() }, fontWeight = FontWeight.Bold)
-            Text(text = metric.value, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            Text(text = metric.unit, fontSize = 12.sp)
+            Icon(
+                imageVector = metric.icon,
+                contentDescription = metric.type.name,
+                modifier = Modifier.size(36.dp),
+                tint = Color.White
+            )
+            Column(horizontalAlignment = Alignment.Start) {
+                Text(text = metric.type.name.replaceFirstChar { it.uppercaseChar() }, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f))
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = metric.value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = metric.unit, fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(bottom = 4.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
 fun LastActivityCard(activity: String, time: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp))
+            Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(activity, fontWeight = FontWeight.Bold)
-                Text(time, style = MaterialTheme.typography.bodySmall)
+                Text(activity, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
             }
         }
     }
@@ -307,17 +360,27 @@ fun WeeklyChart(data: List<Pair<String, Float>>, title: String) {
     val chartModelProducer = ChartEntryModelProducer(data.mapIndexed { index, pair -> entryOf(index.toFloat(), pair.second) })
     val axisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ -> data.getOrNull(value.toInt())?.first ?: "" }
 
-    Card(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+    Card(modifier = Modifier.fillMaxWidth().height(250.dp), shape = RoundedCornerShape(20.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
             if (data.isNotEmpty()) {
-                Chart(
-                    chart = columnChart(),
-                    chartModelProducer = chartModelProducer,
-                    startAxis = rememberStartAxis(),
-                    bottomAxis = rememberBottomAxis(valueFormatter = axisValueFormatter)
-                )
+                ProvideChartStyle(rememberChartStyle()) {
+                    Chart(
+                        chart = columnChart(
+                            columns = listOf(
+                                LineComponent(
+                                    color = MaterialTheme.colorScheme.primary.toArgb(),
+                                    thicknessDp = 16f,
+                                    shape = Shapes.roundedCornerShape(25)
+                                )
+                            )
+                        ),
+                        chartModelProducer = chartModelProducer,
+                        startAxis = rememberStartAxis(),
+                        bottomAxis = rememberBottomAxis(valueFormatter = axisValueFormatter)
+                    )
+                }
             } else {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No weekly data available")
