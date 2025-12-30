@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<permissions-rationale>
+    <permission-rationale-entry
+        permission="androidx.health.permission.READ_HEART_RATE"
+        rationale="We need to read your heart rate to show you your current BPM."/>
+</permissions-rationale>
