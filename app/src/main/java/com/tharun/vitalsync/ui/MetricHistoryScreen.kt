@@ -157,6 +157,74 @@ fun MetricHistoryScreen(
                         }
                     }
                 }
+                MetricType.SLEEP -> {
+                    val totalSleep = historyData.sumOf { it.sleepDuration?.toInt() ?: 0 }
+                    if (totalSleep == 0 && historyData.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No sleep data available for this period.")
+                        }
+                    } else {
+                        LazyColumn {
+                            item {
+                                Text("Total Sleep: ${totalSleep / 60}h ${totalSleep % 60}m", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                            item {
+                                if (historyData.isNotEmpty()) {
+                                    val chartModelProducer = ChartEntryModelProducer(historyData.mapIndexed { index, data ->
+                                        entryOf(index.toFloat(), (data.sleepDuration?.toFloat() ?: 0f) / 60f) // hours
+                                    })
+                                    val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
+                                        try {
+                                            val dataPoint = historyData[value.toInt()]
+                                            SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(dataPoint.timestamp))
+                                        } catch (_: IndexOutOfBoundsException) {
+                                            ""
+                                        }
+                                    }
+                                    ProvideChartStyle(rememberChartStyle()) {
+                                        val primaryColor = MaterialTheme.colorScheme.primary
+                                        Chart(
+                                            chart = lineChart(
+                                                lines = listOf(
+                                                    LineChart.LineSpec(
+                                                        lineColor = primaryColor.toArgb(),
+                                                        lineBackgroundShader = verticalGradient(
+                                                            arrayOf(
+                                                                primaryColor.copy(alpha = 0.5f),
+                                                                primaryColor.copy(alpha = 0f)
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            ),
+                                            chartModelProducer = chartModelProducer,
+                                            startAxis = rememberStartAxis(),
+                                            bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
+                            }
+                            items(historyData) { data ->
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)) {
+                                    val format = "EEE, d MMM"
+                                    Text(
+                                        text = SimpleDateFormat(format, Locale.getDefault()).format(Date(data.timestamp)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    val valueText = data.sleepDuration?.let { "${it / 60}h ${it % 60}m" } ?: ""
+                                    Text(text = valueText, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
                 else -> {
                     if (historyData.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

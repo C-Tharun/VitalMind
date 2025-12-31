@@ -31,20 +31,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<DashboardState> = _userId.flatMapLatest { userId ->
         if (userId != null) {
             repository.getHealthData(userId).map { data ->
-                val today = data.firstOrNull()
+                // Get today's start and end time
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val todayStart = cal.timeInMillis
+                val now = System.currentTimeMillis()
+                val todayData = data.filter { it.timestamp in todayStart..now }
+
+                val totalSteps = todayData.sumOf { it.steps ?: 0 }
+                val totalCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+                val totalDistance = todayData.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
+                val latestHeartRate = todayData.filter { it.heartRate != null }.maxByOrNull { it.timestamp }?.heartRate
+                val latestSleep = todayData.filter { it.sleepDuration != null }.maxByOrNull { it.timestamp }?.sleepDuration
+                val lastActivityData = todayData.filter { it.activityType != null }.maxByOrNull { it.timestamp }
+
                 val weeklySteps = getWeeklyData(data, "E") { it.steps?.toFloat() ?: 0f }
                 val weeklyCalories = getWeeklyData(data, "E") { it.calories ?: 0f }
 
                 DashboardState(
                     userName = _userName.value,
-                    heartRate = today?.heartRate?.toString() ?: "--",
-                    calories = today?.calories?.let { String.format("%.0f", it) } ?: "--",
-                    steps = today?.steps?.toString() ?: "--",
-                    distance = today?.distance?.let { String.format("%.2f", it) } ?: "--",
+                    heartRate = latestHeartRate?.toString() ?: "--",
+                    calories = if (totalCalories > 0f) String.format("%.0f", totalCalories) else "--",
+                    steps = if (totalSteps > 0) totalSteps.toString() else "--",
+                    distance = if (totalDistance > 0f) String.format("%.2f", totalDistance) else "--",
                     heartPoints = "0", // Disabled
-                    sleepDuration = today?.sleepDuration?.let { "${it / 60}h ${it % 60}m" } ?: "--",
-                    lastActivity = today?.activityType ?: "None",
-                    lastActivityTime = today?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
+                    sleepDuration = latestSleep?.let { "${it / 60}h ${it % 60}m" } ?: "--",
+                    lastActivity = lastActivityData?.activityType ?: "None",
+                    lastActivityTime = lastActivityData?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
                     weeklySteps = weeklySteps,
                     weeklyCalories = weeklyCalories,
                     weeklyHeartPoints = emptyList() // Disabled
