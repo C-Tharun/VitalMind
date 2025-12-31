@@ -36,24 +36,10 @@ import com.patrykandpatrick.vico.core.component.shape.LineComponent
 import com.patrykandpatrick.vico.core.component.shape.Shapes
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.entryOf
+import com.tharun.vitalsync.data.HealthData
 import com.tharun.vitalsync.ui.theme.rememberChartStyle
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.roundToInt
-
-// Helper to ensure timestamps are milliseconds
-private fun ensureMillis(timestamp: Long): Long {
-    // If timestamp looks like seconds (<= 1e12), convert to millis
-    return if (timestamp in 0..999_999_999_999L) timestamp * 1000L else timestamp
-}
-
-// Helper to check if two timestamps fall on the same calendar day (local timezone)
-private fun sameDay(timestamp: Long, selectedDateMillis: Long): Boolean {
-    val cal1 = Calendar.getInstance().apply { timeInMillis = ensureMillis(timestamp) }
-    val cal2 = Calendar.getInstance().apply { timeInMillis = ensureMillis(selectedDateMillis) }
-    return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
-            cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,7 +50,8 @@ fun MetricHistoryScreen(
 ) {
     val historyData by viewModel.historyState.collectAsState()
     val heartRateHistory by viewModel.heartRateHistory.collectAsState()
-    var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    val stepsHistory by viewModel.stepsHistory.collectAsState()
+    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(metricType, selectedDate) {
         viewModel.loadHistory(metricType, selectedDate)
@@ -91,135 +78,164 @@ fun MetricHistoryScreen(
             DateSelector(selectedDate = selectedDate, onDateSelected = { selectedDate = it })
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (metricType == MetricType.HEART_RATE) {
-                if (heartRateHistory.dailySummary == null && heartRateHistory.hourlyData.isEmpty() && heartRateHistory.rawData.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No heart rate data available for this period.")
-                    }
-                } else {
-                    // Filter heart rate raw entries to only the selected date and normalize timestamps
-                    val filteredHR = remember(heartRateHistory, selectedDate) {
-                        heartRateHistory.rawData.filter { sameDay(it.timestamp, selectedDate) }
-                    }
-
-                    LazyColumn {
-                        item {
-                            heartRateHistory.dailySummary?.let { summary ->
-                                DailyHeartRateSummary(summary)
-                            }
+            when (metricType) {
+                MetricType.HEART_RATE -> {
+                    if (heartRateHistory.dailySummary == null && heartRateHistory.hourlyData.isEmpty() && heartRateHistory.rawData.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No heart rate data available for this period.")
                         }
-                        item {
-                            if (heartRateHistory.hourlyData.isNotEmpty()) {
-                                HourlyHeartRateChart(heartRateHistory.hourlyData)
+                    } else {
+                        LazyColumn {
+                            item {
+                                heartRateHistory.dailySummary?.let { summary ->
+                                    DailyHeartRateSummary(summary)
+                                }
                             }
-                        }
-                        items(filteredHR) { data ->
-                            val ts = ensureMillis(data.timestamp)
-                            Row(modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp)) {
-                                Text(
-                                    text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ts)),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(
-                                    text = "${data.heartRate?.toInt()} bpm",
-                                    fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
+                            item {
+                                if (heartRateHistory.hourlyData.isNotEmpty()) {
+                                    HourlyHeartRateChart(heartRateHistory.hourlyData)
+                                }
                             }
-                            HorizontalDivider(color = Color(0xFF2A2A2A))
+                            items(heartRateHistory.rawData) {
+                                data ->
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)) {
+                                    Text(
+                                        text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(data.timestamp)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "${data.heartRate?.toInt()} bpm",
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
                         }
                     }
                 }
-            } else {
-                // Non-heart-rate metrics: filter historyData to the selected date
-                val filteredHistory = remember(historyData, selectedDate) {
-                    historyData.filter { sameDay(it.timestamp, selectedDate) }
-                }
-
-                if (filteredHistory.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No history data available for this period.")
-                    }
-                } else {
-                    val chartModelProducer = ChartEntryModelProducer(filteredHistory.mapIndexed { index, data ->
-                        val value = when(metricType) {
-                            MetricType.STEPS -> data.steps?.toFloat() ?: 0f
-                            MetricType.CALORIES -> data.calories ?: 0f
-                            MetricType.DISTANCE -> data.distance ?: 0f
-                            MetricType.SLEEP -> (data.sleepDuration?.toFloat() ?: 0f) / 60f // Show hours in chart
-                            else -> 0f
+                MetricType.STEPS -> {
+                    if (stepsHistory.totalSteps == 0 && stepsHistory.intervalData.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No step data available for this period.")
                         }
-                        entryOf(index.toFloat(), value)
-                    })
-
-                    val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
-                        try {
-                            val idx = value.roundToInt().coerceIn(0, filteredHistory.lastIndex)
-                            val dataPoint = filteredHistory[idx]
-                            val format = when(metricType) {
-                                MetricType.SLEEP -> "d MMM"
-                                else -> "h a"
+                    } else {
+                        LazyColumn {
+                            item {
+                                Text("Total Steps: ${stepsHistory.totalSteps}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
-                            SimpleDateFormat(format, Locale.getDefault()).format(Date(ensureMillis(dataPoint.timestamp)))
-                        } catch (_: IndexOutOfBoundsException) {
-                            ""
+                            item {
+                                if (stepsHistory.intervalData.isNotEmpty()) {
+                                    StepsBarChart(stepsHistory.intervalData)
+                                }
+                            }
+                            items(stepsHistory.intervalData) {
+                                data ->
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)) {
+                                    Text(
+                                        text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(data.timestamp)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "${data.steps} steps",
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
                         }
                     }
+                }
+                else -> {
+                    if (historyData.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No history data available for this period.")
+                        }
+                    } else {
+                        val chartModelProducer = ChartEntryModelProducer(historyData.mapIndexed { index, data ->
+                            val value = when(metricType) {
+                                MetricType.CALORIES -> data.calories ?: 0f
+                                MetricType.DISTANCE -> data.distance ?: 0f
+                                MetricType.SLEEP -> (data.sleepDuration?.toFloat() ?: 0f) / 60f // Show hours in chart
+                                else -> 0f
+                            }
+                            entryOf(index.toFloat(), value)
+                        })
 
-                    ProvideChartStyle(rememberChartStyle()) {
-                        val primaryColor = MaterialTheme.colorScheme.primary
-                        Chart(
-                            chart = lineChart(
-                                lines = listOf(
-                                    LineChart.LineSpec(
-                                        lineColor = primaryColor.toArgb(),
-                                        lineBackgroundShader = verticalGradient(
-                                            arrayOf(
-                                                primaryColor.copy(alpha = 0.5f),
-                                                primaryColor.copy(alpha = 0f)
+                        val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
+                            try {
+                                val dataPoint = historyData[value.toInt()]
+                                val format = when(metricType) {
+                                    MetricType.SLEEP -> "d MMM"
+                                    else -> "h a"
+                                }
+                                SimpleDateFormat(format, Locale.getDefault()).format(Date(dataPoint.timestamp))
+                            } catch (_: IndexOutOfBoundsException) {
+                                ""
+                            }
+                        }
+
+                        ProvideChartStyle(rememberChartStyle()) {
+                            val primaryColor = MaterialTheme.colorScheme.primary
+                            Chart(
+                                chart = lineChart(
+                                    lines = listOf(
+                                        LineChart.LineSpec(
+                                            lineColor = primaryColor.toArgb(),
+                                            lineBackgroundShader = verticalGradient(
+                                                arrayOf(
+                                                    primaryColor.copy(alpha = 0.5f),
+                                                    primaryColor.copy(alpha = 0f)
+                                                )
                                             )
                                         )
                                     )
-                                )
-                            ),
-                            chartModelProducer = chartModelProducer,
-                            startAxis = rememberStartAxis(),
-                            bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter)
-                        )
-                    }
+                                ),
+                                chartModelProducer = chartModelProducer,
+                                startAxis = rememberStartAxis(),
+                                bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter)
+                            )
+                        }
 
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    LazyColumn {
-                        items(filteredHistory) { data ->
-                            Row(modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp)) {
-                                val format = when (metricType) {
-                                    MetricType.SLEEP -> "EEE, d MMM"
-                                    else -> "h:mm a"
+                        LazyColumn {
+                            items(historyData) {
+                                data ->
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp)) {
+                                    val format = when (metricType) {
+                                        MetricType.SLEEP -> "EEE, d MMM"
+                                        else -> "h:mm a"
+                                    }
+                                    Text(
+                                        text = SimpleDateFormat(format, Locale.getDefault()).format(Date(data.timestamp)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    val valueText = when(metricType) {
+                                        MetricType.CALORIES -> data.calories?.let { "$it kcal" }
+                                        MetricType.DISTANCE -> data.distance?.let { "${String.format(Locale.US, "%.2f", it)} km" }
+                                        MetricType.SLEEP -> data.sleepDuration?.let { "${it / 60}h ${it % 60}m" }
+                                        else -> ""
+                                    }
+                                    Text(text = valueText ?: "", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
                                 }
-                                Text(
-                                    text = SimpleDateFormat(format, Locale.getDefault()).format(Date(ensureMillis(data.timestamp))),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                val valueText = when(metricType) {
-                                    MetricType.STEPS -> data.steps?.let { "$it steps" }
-                                    MetricType.CALORIES -> data.calories?.let { "$it kcal" }
-                                    MetricType.DISTANCE -> data.distance?.let { "${String.format(Locale.US, "%.2f", it)} km" }
-                                    MetricType.SLEEP -> data.sleepDuration?.let { "${it / 60}h ${it % 60}m" }
-                                    else -> ""
-                                }
-                                Text(text = valueText ?: "", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
+                                HorizontalDivider()
                             }
-                            HorizontalDivider(color = Color(0xFF2A2A2A))
                         }
                     }
                 }
@@ -295,9 +311,8 @@ fun HourlyHeartRateChart(hourlyData: List<HourlyHeartRateData>) {
 
     val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
         try {
-            val idx = value.roundToInt().coerceIn(0, hourlyData.lastIndex)
-            val dataPoint = hourlyData[idx]
-            SimpleDateFormat("h a", Locale.getDefault()).format(Date(ensureMillis(dataPoint.timestamp)))
+            val dataPoint = hourlyData[value.toInt()]
+            SimpleDateFormat("h a", Locale.getDefault()).format(Date(dataPoint.timestamp))
         } catch (_: IndexOutOfBoundsException) {
             ""
         }
@@ -322,6 +337,47 @@ fun HourlyHeartRateChart(hourlyData: List<HourlyHeartRateData>) {
                             )
                         ),
                         mergeMode = ColumnChart.MergeMode.Stack
+                    ),
+                    chartModelProducer = chartModelProducer,
+                    startAxis = rememberStartAxis(),
+                    bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StepsBarChart(intervalData: List<HealthData>) {
+    val chartModelProducer = ChartEntryModelProducer(
+        intervalData.mapIndexed { index, data ->
+            entryOf(index.toFloat(), data.steps?.toFloat() ?: 0f)
+        }
+    )
+
+    val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
+        try {
+            val dataPoint = intervalData[value.toInt()]
+            SimpleDateFormat("h a", Locale.getDefault()).format(Date(dataPoint.timestamp))
+        } catch (_: IndexOutOfBoundsException) {
+            ""
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Steps per interval", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            ProvideChartStyle(rememberChartStyle()) {
+                Chart(
+                    chart = columnChart(
+                        columns = listOf(
+                            LineComponent(
+                                color = Color(0xFF4361EE).toArgb(), // Blue color
+                                thicknessDp = 8f,
+                                shape = Shapes.roundedCornerShape(topLeftPercent = 50, topRightPercent = 50)
+                            )
+                        )
                     ),
                     chartModelProducer = chartModelProducer,
                     startAxis = rememberStartAxis(),

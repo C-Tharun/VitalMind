@@ -121,14 +121,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HeartRateHistoryState())
 
+    val stepsHistory: StateFlow<StepsHistoryState> = rawHistoryDataFlow
+        .map { data ->
+            if (_historyQuery.value?.first != MetricType.STEPS) return@map StepsHistoryState()
+
+            val filteredData = data.filter { it.steps != null }
+
+            if (filteredData.isEmpty()) {
+                return@map StepsHistoryState()
+            }
+
+            val totalSteps = filteredData.sumOf { it.steps ?: 0 }
+            val intervalData = filteredData
+                .filter { it.steps != null && it.steps > 0 }
+                .sortedBy { it.timestamp }
+
+            StepsHistoryState(
+                totalSteps = totalSteps,
+                intervalData = intervalData
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StepsHistoryState())
+
     val historyState: StateFlow<List<HealthData>> = rawHistoryDataFlow
         .map { data ->
             val metricType = _historyQuery.value?.first
-            if (metricType == null || metricType == MetricType.HEART_RATE) return@map emptyList<HealthData>()
+            if (metricType == null || metricType == MetricType.HEART_RATE || metricType == MetricType.STEPS) return@map emptyList<HealthData>()
 
             val filteredData = data.filter {
                 when (metricType) {
-                    MetricType.STEPS -> it.steps != null
                     MetricType.CALORIES -> it.calories != null
                     MetricType.DISTANCE -> it.distance != null
                     MetricType.SLEEP -> it.sleepDuration != null
@@ -137,20 +158,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             when (metricType) {
-                MetricType.DISTANCE, MetricType.CALORIES, MetricType.STEPS -> {
+                MetricType.DISTANCE, MetricType.CALORIES -> {
                     filteredData
                         .groupBy { TimeUnit.MILLISECONDS.toHours(it.timestamp) }
                         .map { (hour, group) ->
-                            val totalSteps = group.sumOf { it.steps ?: 0 }
                             val totalDistance = group.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
                             val totalCalories = group.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
                             HealthData(
                                 userId = group.first().userId,
-                                steps = if (metricType == MetricType.STEPS) totalSteps else null,
                                 distance = if (metricType == MetricType.DISTANCE) totalDistance else null,
                                 calories = if (metricType == MetricType.CALORIES) totalCalories else null,
                                 timestamp = TimeUnit.HOURS.toMillis(hour),
-                                heartRate = null, sleepDuration = null, activityType = null, heartPoints = null
+                                steps = null, heartRate = null, sleepDuration = null, activityType = null, heartPoints = null
                             )
                         }
                 }
@@ -220,6 +239,11 @@ data class HeartRateHistoryState(
     val dailySummary: HeartRateDailySummary? = null,
     val hourlyData: List<HourlyHeartRateData> = emptyList(),
     val rawData: List<HealthData> = emptyList()
+)
+
+data class StepsHistoryState(
+    val totalSteps: Int = 0,
+    val intervalData: List<HealthData> = emptyList()
 )
 
 data class HeartRateDailySummary(
