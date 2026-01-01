@@ -12,7 +12,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,14 +24,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -66,8 +67,7 @@ import com.tharun.vitalsync.ui.DashboardState
 import com.tharun.vitalsync.ui.MainViewModel
 import com.tharun.vitalsync.ui.MetricHistoryScreen
 import com.tharun.vitalsync.ui.MetricType
-import com.tharun.vitalsync.ui.theme.VitalSyncTheme
-import com.tharun.vitalsync.ui.theme.rememberChartStyle
+import com.tharun.vitalsync.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -76,7 +76,7 @@ data class HealthMetric(
     val value: String,
     val unit: String,
     val icon: ImageVector,
-    val colors: List<Color>
+    val color: Color
 )
 
 class MainActivity : ComponentActivity() {
@@ -250,7 +250,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen(
     isSignedIn: Boolean,
@@ -258,20 +257,12 @@ fun AppScreen(
     onConnectClick: () -> Unit,
     navController: NavController
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("VitalSync") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding)
+            modifier = Modifier.fillMaxSize()
         ) {
             AnimatedVisibility(visible = !isSignedIn) {
                 ConnectScreen(onConnectClick)
@@ -286,29 +277,27 @@ fun AppScreen(
 @Composable
 fun Dashboard(state: DashboardState, navController: NavController) {
     val summaryMetrics = listOfNotNull(
-        HealthMetric(MetricType.HEART_RATE, state.heartRate, "bpm", Icons.Default.Favorite, listOf(Color(0xFFF44336), Color(0xFFFFCDD2))),
-        HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, listOf(Color(0xFFFFA726), Color(0xFFFFE0B2))),
-        HealthMetric(MetricType.STEPS, state.steps, "", Icons.AutoMirrored.Filled.DirectionsWalk, listOf(Color(0xFF4CAF50), Color(0xFFC8E6C9))),
-        HealthMetric(MetricType.DISTANCE, state.distance, "km", Icons.Default.Map, listOf(Color(0xFF2196F3), Color(0xFFBBDEFB))),
-        HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, listOf(Color(0xFF9C27B0), Color(0xFFE1BEE7)))
+        HealthMetric(MetricType.STEPS, state.steps, "", Icons.AutoMirrored.Filled.DirectionsWalk, StepCountPurple),
+        HealthMetric(MetricType.DISTANCE, state.distance, "km", Icons.Default.Map, StepDistanceCyan),
+        HealthMetric(MetricType.HEART_RATE, state.heartRate, "bpm", Icons.Default.Favorite, ActivityRingRed),
+        HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, LightGreen),
+        HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
 
     LazyColumn(modifier = Modifier.padding(16.dp)) {
         item {
-            Greeting(name = state.userName)
+            ActivityRing(progress = state.calories.toFloatOrNull() ?: 0f, goal = 3000f)
             Spacer(modifier = Modifier.height(24.dp))
-            SectionTitle(title = "Today's Summary", icon = Icons.Default.Analytics)
-            Spacer(modifier = Modifier.height(16.dp))
         }
         item {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(380.dp)
+                modifier = Modifier.height(580.dp) // Adjusted height for 3 rows
             ) {
                 items(summaryMetrics) { metric ->
-                    HealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+                    NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
                 }
             }
         }
@@ -347,48 +336,121 @@ fun SectionTitle(title: String, icon: ImageVector) {
 }
 
 @Composable
-fun Greeting(name: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer)))
-            .padding(horizontal = 24.dp, vertical = 32.dp)
+fun ActivityRing(progress: Float, goal: Float) {
+    val progressValue = (progress / goal).coerceIn(0f, 1f)
+
+    Card(
+        modifier = Modifier.fillMaxWidth().height(200.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Text("Good Morning,", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary)
-        Text(name, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+        Row(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawArc(
+                        color = Color.DarkGray,
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = 30f)
+                    )
+                    drawArc(
+                        color = ActivityRingRed,
+                        startAngle = -90f,
+                        sweepAngle = 360 * progressValue,
+                        useCenter = false,
+                        style = Stroke(width = 30f)
+                    )
+                }
+                Icon(
+                    Icons.Default.ArrowForward,
+                    contentDescription = "Move",
+                    tint = ActivityRingRed,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(24.dp))
+            Column {
+                Text("Move", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "${progress.toInt()}/${goal.toInt()} KCAL",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ActivityRingRed
+                )
+            }
+        }
     }
 }
 
+
 @Composable
-fun HealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
+fun NewHealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.aspectRatio(1f).clickable(onClick = onClick),
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(colors = metric.colors))
                 .padding(16.dp),
-            horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = metric.icon,
-                contentDescription = metric.type.name,
-                modifier = Modifier.size(36.dp),
-                tint = Color.White
-            )
-            Column(horizontalAlignment = Alignment.Start) {
-                Text(text = metric.type.name.replaceFirstChar { it.uppercaseChar() }, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.9f))
-                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = metric.value, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    metric.type.name.split('_').joinToString(" ") { it.lowercase().replaceFirstChar { char -> char.titlecase() } },
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "details", tint = LightGreen)
+            }
+
+            Column {
+                Text("Today", style = MaterialTheme.typography.bodyMedium)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = metric.value,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = metric.color
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = metric.unit, fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(bottom = 4.dp))
+                    if (metric.unit.isNotEmpty()) {
+                        Text(
+                            text = metric.unit,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = metric.color.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 8.dp) // Aligns with baseline of big text
+                        )
+                    }
+                }
+            }
+
+            // Placeholder for the small chart
+            Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    val heights = remember { List(15) { Random().nextFloat() } }
+                    heights.forEach {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(it)
+                                .background(metric.color.copy(alpha = 0.5f), shape = RoundedCornerShape(2.dp))
+                        )
+                    }
                 }
             }
         }
@@ -400,14 +462,14 @@ fun LastActivityCard(activity: String, time: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(activity, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
+                Text(activity, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
             }
         }
     }
@@ -418,7 +480,7 @@ fun WeeklyChart(data: List<Pair<String, Float>>, title: String) {
     val chartModelProducer = ChartEntryModelProducer(data.mapIndexed { index, pair -> entryOf(index.toFloat(), pair.second) })
     val axisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ -> data.getOrNull(value.toInt())?.first ?: "" }
 
-    Card(modifier = Modifier.fillMaxWidth().height(250.dp), shape = RoundedCornerShape(20.dp)) {
+    Card(modifier = Modifier.fillMaxWidth().height(250.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))

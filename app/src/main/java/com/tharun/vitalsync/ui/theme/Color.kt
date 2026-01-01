@@ -2,7 +2,17 @@ package com.tharun.vitalsync.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Light Theme Colors
+// New Dark Theme Colors
+val DarkBackground = Color(0xFF000000)
+val DarkOnBackground = Color(0xFFFFFFFF)
+val DarkSurface = Color(0xFF1C1C1E)
+val DarkOnSurface = Color(0xFFFFFFFF)
+val ActivityRingRed = Color(0xFFFA2256)
+val StepCountPurple = Color(0xFFD07CFF)
+val StepDistanceCyan = Color(0xFF40E0D0)
+val LightGreen = Color(0xFF00FF00)
+
+// Light Theme Colors (kept for reference, but not used in the new design)
 val Primary = Color(0xFF006C45)
 val OnPrimary = Color.White
 val PrimaryContainer = Color(0xFF8CF7BE)
@@ -26,28 +36,3 @@ val OnSurface = Color(0xFF191C1A)
 val SurfaceVariant = Color(0xFFDDE5DB)
 val OnSurfaceVariant = Color(0xFF414942)
 val Outline = Color(0xFF717972)
-
-// Dark Theme Colors
-val DarkPrimary = Color(0xFF70DAA4)
-val DarkOnPrimary = Color(0xFF003822)
-val DarkPrimaryContainer = Color(0xFF005233)
-val DarkOnPrimaryContainer = Color(0xFF8CF7BE)
-val DarkSecondary = Color(0xFFB5CCBA)
-val DarkOnSecondary = Color(0xFF203528)
-val DarkSecondaryContainer = Color(0xFF374B3D)
-val DarkOnSecondaryContainer = Color(0xFFD1E8D5)
-val DarkTertiary = Color(0xFFA5CDDE)
-val DarkOnTertiary = Color(0xFF073543)
-val DarkTertiaryContainer = Color(0xFF244C5A)
-val DarkOnTertiaryContainer = Color(0xFFC0E8FA)
-val DarkError = Color(0xFFFFB4AB)
-val DarkOnError = Color(0xFF690005)
-val DarkErrorContainer = Color(0xFF93000A)
-val DarkOnerrorContainer = Color(0xFFFFDAD6)
-val DarkBackground = Color(0xFF191C1A)
-val DarkOnBackground = Color(0xFFE1E3DF)
-val DarkSurface = Color(0xFF191C1A)
-val DarkOnSurface = Color(0xFFE1E3DF)
-val DarkSurfaceVariant = Color(0xFF414942)
-val DarkOnSurfaceVariant = Color(0xFFC1C9C0)
-val DarkOutline = Color(0xFF8B938B)

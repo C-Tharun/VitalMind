@@ -1,42 +1,43 @@
 package com.tharun.vitalsync.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    primaryContainer = DarkPrimaryContainer,
-    onPrimaryContainer = DarkOnPrimaryContainer,
-    secondary = DarkSecondary,
-    onSecondary = DarkOnSecondary,
-    secondaryContainer = DarkSecondaryContainer,
-    onSecondaryContainer = DarkOnSecondaryContainer,
-    tertiary = DarkTertiary,
-    onTertiary = DarkOnTertiary,
-    tertiaryContainer = DarkTertiaryContainer,
-    onTertiaryContainer = DarkOnTertiaryContainer,
-    error = DarkError,
-    onError = DarkOnError,
-    errorContainer = DarkErrorContainer,
-    onErrorContainer = DarkOnerrorContainer,
+    primary = ActivityRingRed,
     background = DarkBackground,
     onBackground = DarkOnBackground,
     surface = DarkSurface,
     onSurface = DarkOnSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    outline = DarkOutline,
+    onPrimary = Color.White,
+    primaryContainer = DarkSurface,
+    onPrimaryContainer = Color.White,
+    secondary = StepCountPurple,
+    onSecondary = Color.White,
+    secondaryContainer = DarkSurface,
+    onSecondaryContainer = Color.White,
+    tertiary = StepDistanceCyan,
+    onTertiary = Color.Black,
+    tertiaryContainer = DarkSurface,
+    onTertiaryContainer = Color.White,
+    error = Color.Red,
+    onError = Color.White,
+    errorContainer = DarkSurface,
+    onErrorContainer = Color.White,
+    surfaceVariant = DarkSurface,
+    onSurfaceVariant = DarkOnSurface,
+    outline = Color.DarkGray
 )
 
+// Keep light theme as it is, in case it's ever needed.
 private val LightColorScheme = lightColorScheme(
     primary = Primary,
     onPrimary = OnPrimary,
@@ -65,7 +66,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun VitalSyncTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // Forcing dark theme as per new design
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) {
@@ -78,8 +79,8 @@ fun VitalSyncTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            window.statusBarColor = colorScheme.background.toArgb() // Match background
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
