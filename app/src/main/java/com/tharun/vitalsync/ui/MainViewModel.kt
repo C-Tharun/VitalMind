@@ -316,15 +316,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val today = cal.get(Calendar.DAY_OF_YEAR)
         val currentYear = cal.get(Calendar.YEAR)
 
-        return data.filter {
+        // Get the last 7 days' dates and their labels (e.g., Mon, Tue, ...)
+        val days = (6 downTo 0).map { offset ->
+            cal.timeInMillis = System.currentTimeMillis()
+            cal.add(Calendar.DAY_OF_YEAR, -offset)
+            val label = SimpleDateFormat(format, Locale.getDefault()).format(cal.time)
+            val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
+            val year = cal.get(Calendar.YEAR)
+            Triple(label, dayOfYear, year)
+        }
+
+        // Group data by day label
+        val grouped = data.filter {
             cal.timeInMillis = it.timestamp
             cal.get(Calendar.YEAR) == currentYear && cal.get(Calendar.DAY_OF_YEAR) > today - 7
         }.groupBy {
             cal.timeInMillis = it.timestamp
             SimpleDateFormat(format, Locale.getDefault()).format(cal.time)
         }.mapValues { entry ->
-            entry.value.maxOf(valueSelector)
-        }.map { it.key to it.value }
+            entry.value.sumOf { valueSelector(it).toDouble() }.toFloat()
+        }
+
+        // Build result for each day, filling missing days with 0f
+        return days.map { triple ->
+            val label = triple.first
+            label to (grouped[label] ?: 0f)
+        }
     }
 }
 

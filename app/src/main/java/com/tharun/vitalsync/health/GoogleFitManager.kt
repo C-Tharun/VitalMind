@@ -29,12 +29,36 @@ class GoogleFitManager(private val context: Context) {
         val end = Instant.now()
         val start = ZonedDateTime.ofInstant(end, ZoneId.systemDefault()).toLocalDate()
             .atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val request = DataReadRequest.Builder()
-            .read(dataType)
-            .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
-            .build()
+        val isSteps = dataType == DataType.TYPE_STEP_COUNT_DELTA
+        val isCalories = dataType == DataType.TYPE_CALORIES_EXPENDED
+        val request = if (isSteps) {
+            DataReadRequest.Builder()
+                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
+                .bucketByTime(1, TimeUnit.DAYS)
+                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
+                .build()
+        } else if (isCalories) {
+            DataReadRequest.Builder()
+                .aggregate(DataType.TYPE_CALORIES_EXPENDED, DataType.AGGREGATE_CALORIES_EXPENDED)
+                .bucketByTime(1, TimeUnit.DAYS)
+                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
+                .build()
+        } else {
+            DataReadRequest.Builder()
+                .read(dataType)
+                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
+                .build()
+        }
         val response = Fitness.getHistoryClient(context, account).readData(request).await()
-        val sum = response.getDataSet(dataType).dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
+        val sum = if (isSteps || isCalories) {
+            response.buckets.sumOf { bucket ->
+                bucket.dataSets.sumOf { dataSet ->
+                    dataSet.dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
+                }
+            }
+        } else {
+            response.getDataSet(dataType).dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
+        }
         return if (sum > 0) sum.toFloat() else null
     }
 

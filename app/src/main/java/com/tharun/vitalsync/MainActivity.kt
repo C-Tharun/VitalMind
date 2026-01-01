@@ -447,8 +447,15 @@ fun Dashboard(state: DashboardState, navController: NavController) {
         HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, LightGreen),
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
-    LazyColumn(modifier = Modifier.padding(16.dp)) {
+    LazyColumn(modifier = Modifier.padding(top = 32.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
         item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Welcome, ${state.userName}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
             MultiMetricHeartRings(
                 steps = steps,
                 stepsGoal = stepsGoal,
