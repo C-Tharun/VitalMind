@@ -23,9 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,7 +39,7 @@ fun ActivityHistoryScreen(
     navController: NavController,
     viewModel: MainViewModel
 ) {
-    val activityHistory by viewModel.activityHistory.collectAsState()
+    val historyData by viewModel.historyState.collectAsState()
     val selectedDate = rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(selectedDate.value) {
@@ -70,7 +69,7 @@ fun ActivityHistoryScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(activityHistory) { activity ->
+                items(historyData) { activity ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -83,7 +82,9 @@ fun ActivityHistoryScreen(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = SimpleDateFormat("EEE, d MMM, h:mm a", Locale.getDefault()).format(Date(activity.timestamp)),
+                                text = SimpleDateFormat("EEE, d MMM, h:mm a", Locale.getDefault()).format(
+                                    Date(activity.timestamp)
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )

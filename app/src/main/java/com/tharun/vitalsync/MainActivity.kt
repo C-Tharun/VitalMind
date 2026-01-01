@@ -61,6 +61,7 @@ import com.patrykandpatrick.vico.core.component.shape.Shapes
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.entryOf
 import com.tharun.vitalsync.ui.ActivityHistoryScreen
+import com.tharun.vitalsync.ui.ConnectScreen
 import com.tharun.vitalsync.ui.DashboardState
 import com.tharun.vitalsync.ui.MainViewModel
 import com.tharun.vitalsync.ui.MetricHistoryScreen
@@ -278,20 +279,6 @@ fun AppScreen(
             AnimatedVisibility(visible = isSignedIn) {
                 Dashboard(state, navController)
             }
-        }
-    }
-}
-
-@Composable
-fun ConnectScreen(onConnectClick: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("Connect to Google Fit to see your health data.", modifier = Modifier.padding(bottom = 16.dp))
-        Button(onClick = onConnectClick) {
-            Text("Connect to Google Fit")
         }
     }
 }

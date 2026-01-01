@@ -78,26 +78,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cal = Calendar.getInstance()
             cal.timeInMillis = selectedDate
 
-            val isToday = Calendar.getInstance().get(Calendar.DAY_OF_YEAR) == cal.get(Calendar.DAY_OF_YEAR) &&
-                    Calendar.getInstance().get(Calendar.YEAR) == cal.get(Calendar.YEAR)
+            val startTime:
 
-            cal.set(Calendar.HOUR_OF_DAY, 0)
-            cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-            val startTime = cal.timeInMillis
+            Long
+            val endTime: Long
 
-            val endTime = if (isToday) {
-                System.currentTimeMillis()
+            if (metricType == MetricType.SLEEP) {
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                cal.add(Calendar.DATE, 1) // End of selected day
+                endTime = cal.timeInMillis
+                cal.add(Calendar.DATE, -8) // Start of 7 days before
+                startTime = cal.timeInMillis
             } else {
-                cal.add(Calendar.DATE, 1)
-                cal.timeInMillis
+                val isToday = Calendar.getInstance().get(Calendar.DAY_OF_YEAR) == cal.get(Calendar.DAY_OF_YEAR) &&
+                        Calendar.getInstance().get(Calendar.YEAR) == cal.get(Calendar.YEAR)
+
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                startTime = cal.timeInMillis
+
+                endTime = if (isToday) {
+                    System.currentTimeMillis()
+                } else {
+                    cal.add(Calendar.DATE, 1)
+                    cal.timeInMillis
+                }
             }
 
             flow {
                 try {
                     repository.syncHistoricalData(userId, startTime, endTime, metricType)
-                    if (metricType != MetricType.ACTIVITY) {
+                    if (metricType != MetricType.ACTIVITY && metricType != MetricType.SLEEP) {
                         repository.syncHistoricalData(userId, startTime, endTime, MetricType.ACTIVITY)
                     }
                 } catch (e: Exception) {
@@ -262,26 +278,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                 }
                 MetricType.SLEEP -> {
-                    filteredData
-                        .groupBy {
-                            val cal = Calendar.getInstance()
-                            cal.timeInMillis = it.timestamp
-                            if (cal.get(Calendar.HOUR_OF_DAY) < 12) {
-                                cal.add(Calendar.DATE, -1)
-                            }
-                            cal.set(Calendar.HOUR_OF_DAY, 0)
-                            cal.set(Calendar.MINUTE, 0)
-                            cal.set(Calendar.SECOND, 0)
-                            cal.set(Calendar.MILLISECOND, 0)
-                            cal.timeInMillis
-                        }
-                        .map { (nightTimestamp, group) ->
-                            val totalSleep = group.sumOf { it.sleepDuration?.toInt() ?: 0 }
-                            group.first().copy(
-                                sleepDuration = totalSleep.toLong(),
-                                timestamp = nightTimestamp
-                            )
-                        }
+                    filteredData.sortedBy { it.timestamp }
                 }
                 else -> filteredData
             }
