@@ -50,6 +50,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val weeklySteps = getWeeklyData(data, "E") { it.steps?.toFloat() ?: 0f }
                 val weeklyCalories = getWeeklyData(data, "E") { it.calories ?: 0f }
+                val latestWeight = todayData.filter { it.weight != null }.maxByOrNull { it.timestamp }?.weight
+                val totalFloorsClimbed = todayData.sumOf { it.floorsClimbed?.toDouble() ?: 0.0 }.toFloat()
+                val totalMoveMinutes = todayData.sumOf { it.moveMinutes ?: 0 }
 
                 DashboardState(
                     userName = _userName.value,
@@ -63,7 +66,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     lastActivityTime = lastActivityData?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
                     weeklySteps = weeklySteps,
                     weeklyCalories = weeklyCalories,
-                    weeklyHeartPoints = emptyList() // Disabled
+                    weeklyHeartPoints = emptyList(), // Disabled
+                    weight = latestWeight?.let { String.format("%.1f", it) } ?: "--",
+                    floorsClimbed = if (totalFloorsClimbed > 0f) String.format("%.0f", totalFloorsClimbed) else "--",
+                    moveMinutes = if (totalMoveMinutes > 0) totalMoveMinutes.toString() else "--"
                 )
             }
         } else {
@@ -311,36 +317,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _historyQuery.value = metricType to selectedDate
     }
 
+    /**
+     * Syncs the last 7 days of data for all main metrics (steps, calories, distance, etc.)
+     */
+    fun syncLast7DaysData() {
+        _userId.value?.let { userId ->
+            viewModelScope.launch {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val endTime = System.currentTimeMillis()
+                cal.add(Calendar.DAY_OF_YEAR, -6)
+                val startTime = cal.timeInMillis
+                // Sync for all main metrics
+                MetricType.values().forEach { metricType ->
+                    if (metricType != MetricType.HEART_POINTS) { // skip disabled
+                        try {
+                            repository.syncHistoricalData(userId, startTime, endTime, metricType)
+                        } catch (e: Exception) {
+                            Log.e("MainViewModel", "Failed to sync $metricType for last 7 days", e)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun getWeeklyData(data: List<HealthData>, format: String, valueSelector: (HealthData) -> Float): List<Pair<String, Float>> {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val labelFormat = SimpleDateFormat(format, Locale.getDefault())
+
         val cal = Calendar.getInstance()
-        val today = cal.get(Calendar.DAY_OF_YEAR)
-        val currentYear = cal.get(Calendar.YEAR)
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val startTime = cal.timeInMillis
 
-        // Get the last 7 days' dates and their labels (e.g., Mon, Tue, ...)
-        val days = (6 downTo 0).map { offset ->
-            cal.timeInMillis = System.currentTimeMillis()
-            cal.add(Calendar.DAY_OF_YEAR, -offset)
-            val label = SimpleDateFormat(format, Locale.getDefault()).format(cal.time)
-            val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
-            val year = cal.get(Calendar.YEAR)
-            Triple(label, dayOfYear, year)
-        }
+        val dailyTotals = data
+            .filter { it.timestamp >= startTime }
+            .groupBy { dateFormat.format(Date(it.timestamp)) }
+            .mapValues { entry ->
+                entry.value.sumOf { valueSelector(it).toDouble() }.toFloat()
+            }
 
-        // Group data by day label
-        val grouped = data.filter {
-            cal.timeInMillis = it.timestamp
-            cal.get(Calendar.YEAR) == currentYear && cal.get(Calendar.DAY_OF_YEAR) > today - 7
-        }.groupBy {
-            cal.timeInMillis = it.timestamp
-            SimpleDateFormat(format, Locale.getDefault()).format(cal.time)
-        }.mapValues { entry ->
-            entry.value.sumOf { valueSelector(it).toDouble() }.toFloat()
-        }
-
-        // Build result for each day, filling missing days with 0f
-        return days.map { triple ->
-            val label = triple.first
-            label to (grouped[label] ?: 0f)
+        return (0..6).map { i ->
+            val dayCal = Calendar.getInstance()
+            dayCal.add(Calendar.DAY_OF_YEAR, i - 6)
+            val dayKey = dateFormat.format(dayCal.time)
+            val label = labelFormat.format(dayCal.time)
+            label to (dailyTotals[dayKey] ?: 0f)
         }
     }
 }
@@ -367,3 +396,4 @@ data class HourlyHeartRateData(
     val min: Float,
     val max: Float
 )
+

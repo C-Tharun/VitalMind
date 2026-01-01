@@ -30,6 +30,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
@@ -37,7 +39,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -70,6 +71,7 @@ import com.tharun.vitalsync.ui.MetricType
 import com.tharun.vitalsync.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 data class HealthMetric(
     val type: MetricType,
@@ -93,6 +95,8 @@ class MainActivity : ComponentActivity() {
             .addDataType(DataType.TYPE_DISTANCE_DELTA, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.AGGREGATE_DISTANCE_DELTA, FitnessOptions.ACCESS_READ)
             .addDataType(DataType.TYPE_SLEEP_SEGMENT, FitnessOptions.ACCESS_READ)
+            .addDataType(DataType.TYPE_WEIGHT, FitnessOptions.ACCESS_READ)
+            .addDataType(DataType.TYPE_MOVE_MINUTES, FitnessOptions.ACCESS_READ)
             .build()
     }
 
@@ -193,7 +197,8 @@ class MainActivity : ComponentActivity() {
                                 val googleSignInClient = GoogleSignIn.getClient(activity, signInOptions)
                                 signInLauncher.launch(googleSignInClient.signInIntent)
                             },
-                            navController = navController
+                            navController = navController,
+                            viewModel = viewModel // Pass viewModel to AppScreen
                         )
 
                         // Show error message if any
@@ -236,6 +241,13 @@ class MainActivity : ComponentActivity() {
                                 isSyncTriggered = true
                             }
                         }
+
+                        // In MainActivity, after sign-in and permission, trigger syncLast7DaysData
+                        LaunchedEffect(isSignedIn, hasPermission) {
+                            if (isSignedIn && hasPermission && signInError == null) {
+                                viewModel.syncLast7DaysData()
+                            }
+                        }
                     }
                     composable("history/{metricType}") { backStackEntry ->
                         val metricType = MetricType.valueOf(backStackEntry.arguments?.getString("metricType") ?: "STEPS")
@@ -255,7 +267,8 @@ fun AppScreen(
     isSignedIn: Boolean,
     state: DashboardState,
     onConnectClick: () -> Unit,
-    navController: NavController
+    navController: NavController, // Not nullable
+    viewModel: MainViewModel
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -268,9 +281,137 @@ fun AppScreen(
                 ConnectScreen(onConnectClick)
             }
             AnimatedVisibility(visible = isSignedIn) {
-                Dashboard(state, navController)
+                MainNavigation(viewModel = viewModel, navController = navController)
             }
         }
+    }
+}
+
+@Composable
+fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
+    var selectedTab by remember { mutableStateOf(0) }
+    val state by viewModel.state.collectAsState()
+    val listState = rememberLazyListState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (selectedTab) {
+            0 -> Dashboard(state, navController)
+            1 -> ProfileScreen(state)
+        }
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            BottomBlurredNavBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+        }
+    }
+}
+
+@Composable
+fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    // Mimic the floating, blurred, rounded bar from the reference image
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 32.dp, start = 32.dp, end = 32.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(
+                brush = Brush.horizontalGradient(
+                    listOf(
+                        Color(0xFFF8F8FF).copy(alpha = 0.85f),
+                        Color(0xFFE0E0E0).copy(alpha = 0.85f)
+                    )
+                ),
+                shape = RoundedCornerShape(32.dp)
+            )
+            .height(64.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NavBarItem(
+                icon = Icons.Default.Home,
+                label = "Home",
+                selected = selectedTab == 0,
+                onClick = { onTabSelected(0) },
+                modifier = Modifier.weight(1f)
+            )
+            NavBarItem(
+                icon = Icons.Default.Person,
+                label = "Profile",
+                selected = selectedTab == 1,
+                onClick = { onTabSelected(1) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (selected) MaterialTheme.colorScheme.primary else Color.Black,
+            modifier = Modifier.size(28.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) MaterialTheme.colorScheme.primary else Color.Black
+        )
+    }
+}
+
+@Composable
+fun ProfileScreen(state: DashboardState) {
+    // Mimic the Home UI but show all available/extra data
+    LazyColumn(modifier = Modifier.padding(top = 32.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Profile: ${state.userName}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    ProfileDataRow("Steps", state.steps)
+                    ProfileDataRow("Calories", state.calories)
+                    ProfileDataRow("Distance", state.distance)
+                    ProfileDataRow("Heart Rate", state.heartRate)
+                    ProfileDataRow("Sleep Duration", state.sleepDuration)
+                    ProfileDataRow("Last Activity", state.lastActivity)
+                    ProfileDataRow("Weight", state.weight)
+                    ProfileDataRow("Floors Climbed", state.floorsClimbed)
+                    ProfileDataRow("Move Minutes", state.moveMinutes)
+                    // Add more as needed
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+        // Optionally, add more profile-specific cards or charts here
+    }
+}
+
+@Composable
+fun ProfileDataRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -335,7 +476,6 @@ fun MultiMetricHeartRings(
     val distanceProgress = (distance / distanceGoal).coerceIn(0f, 1f)
     val ringColors = listOf(StepCountPurple, ActivityRingRed, StepDistanceCyan)
     val ringProgress = listOf(stepsProgress, kcalProgress, distanceProgress)
-    val ringWidths = listOf(32f, 22f, 12f)
     val ringValues = listOf(steps, kcal, distance)
     val ringGoals = listOf(stepsGoal, kcalGoal, distanceGoal)
     val ringUnits = listOf("steps", "kcal", "km")

@@ -12,5 +12,8 @@ data class DashboardState(
     val lastActivityTime: String = "",
     val weeklySteps: List<Pair<String, Float>> = emptyList(),
     val weeklyCalories: List<Pair<String, Float>> = emptyList(),
-    val weeklyHeartPoints: List<Pair<String, Float>> = emptyList()
+    val weeklyHeartPoints: List<Pair<String, Float>> = emptyList(),
+    val weight: String = "--",
+    val floorsClimbed: String = "--",
+    val moveMinutes: String = "--"
 )
