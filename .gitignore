@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+.idea/markdown.xml
+.idea/copilot.data.migration.*.xml
+.idea/deploymentTargetSelector.xml
