@@ -87,27 +87,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val cal = Calendar.getInstance()
             cal.timeInMillis = selectedDate
 
-            val startTime:
-
-            Long
+            val startTime: Long
             val endTime: Long
             val isToday = Calendar.getInstance().get(Calendar.DAY_OF_YEAR) == cal.get(Calendar.DAY_OF_YEAR) &&
                     Calendar.getInstance().get(Calendar.YEAR) == cal.get(Calendar.YEAR)
 
             if (metricType == MetricType.SLEEP) {
-                endTime = if (isToday) {
-                    System.currentTimeMillis()
-                } else {
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    cal.add(Calendar.DATE, 1) // End of selected day
-                    cal.timeInMillis
-                }
+                // Sleep night is from previous day 6 PM to selected day 6 PM. This 24h window should capture one night of sleep.
+                val endCal = Calendar.getInstance()
+                endCal.timeInMillis = selectedDate
+                endCal.set(Calendar.HOUR_OF_DAY, 18) // 6 PM on selected day
+                endCal.set(Calendar.MINUTE, 0)
+                endCal.set(Calendar.SECOND, 0)
+                endTime = endCal.timeInMillis
+
                 val startCal = Calendar.getInstance()
-                startCal.timeInMillis = endTime
-                startCal.add(Calendar.DATE, -7)
+                startCal.timeInMillis = selectedDate
+                startCal.add(Calendar.DATE, -1) // Previous day
+                startCal.set(Calendar.HOUR_OF_DAY, 18) // 6 PM on previous day
                 startTime = startCal.timeInMillis
             } else {
                 cal.set(Calendar.HOUR_OF_DAY, 0)
@@ -379,14 +376,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val label = labelFormat.format(dayCal.time)
             label to (dailyTotals[dayKey] ?: 0f)
         }
-    }
-
-    /**
-     * Fetch sleep data directly from Google Fit for a given day (startMillis to endMillis).
-     * Returns a list of HealthData for sleep sessions overlapping with the day.
-     */
-    suspend fun fetchSleepDataFromGoogleFitForDay(userId: String, startMillis: Long, endMillis: Long): List<HealthData> {
-        return googleFitManager.readHistoricalData(startMillis, endMillis, MetricType.SLEEP)
     }
 
     // Helper function to calculate overlap in minutes between a sleep session and a day

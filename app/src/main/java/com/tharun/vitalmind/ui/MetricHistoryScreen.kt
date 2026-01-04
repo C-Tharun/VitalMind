@@ -56,33 +56,8 @@ fun MetricHistoryScreen(
     val stepsHistory by viewModel.stepsHistory.collectAsState()
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    // --- Google Fit direct fetch for sleep ---
-    var googleFitSleepData by remember { mutableStateOf<List<HealthData>?>(null) }
-    val coroutineScope = rememberCoroutineScope()
-    val dashboardState by viewModel.state.collectAsState()
-    val userId = dashboardState.userName // Use userName as fallback if userId is not exposed
-
     LaunchedEffect(metricType, selectedDate) {
         viewModel.loadHistory(metricType, selectedDate)
-        if (metricType == MetricType.SLEEP) {
-            // Calculate start and end of the selected day
-            val cal = Calendar.getInstance()
-            cal.timeInMillis = selectedDate
-            cal.set(Calendar.HOUR_OF_DAY, 0)
-            cal.set(Calendar.MINUTE, 0)
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-            val dayStart = cal.timeInMillis
-            cal.add(Calendar.DATE, 1)
-            val dayEnd = cal.timeInMillis
-            // Fetch directly from Google Fit
-            coroutineScope.launch {
-                val fitData = viewModel.fetchSleepDataFromGoogleFitForDay(userId, dayStart, dayEnd)
-                googleFitSleepData = fitData
-            }
-        } else {
-            googleFitSleepData = null
-        }
     }
 
     Scaffold(
@@ -195,8 +170,7 @@ fun MetricHistoryScreen(
                     cal.add(Calendar.DATE, 1)
                     val dayEnd = cal.timeInMillis
 
-                    val sleepData = googleFitSleepData ?: historyData
-                    val selectedDateSleepData = sleepData.filter { data ->
+                    val selectedDateSleepData = historyData.filter { data ->
                         val sleepStart = data.timestamp
                         val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
                         sleepStart < dayEnd && sleepEnd > dayStart
@@ -214,51 +188,8 @@ fun MetricHistoryScreen(
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
                             item {
-                                if (sleepData.isNotEmpty()) {
-                                    val groupedByNight = sleepData.groupBy { data ->
-                                        val nightCal = Calendar.getInstance()
-                                        nightCal.timeInMillis = data.timestamp
-                                        if (nightCal.get(Calendar.HOUR_OF_DAY) < 12) {
-                                            nightCal.add(Calendar.DATE, -1)
-                                        }
-                                        nightCal.set(Calendar.HOUR_OF_DAY, 12)
-                                        nightCal.set(Calendar.MINUTE, 0)
-                                        nightCal.set(Calendar.SECOND, 0)
-                                        nightCal.set(Calendar.MILLISECOND, 0)
-                                        nightCal.timeInMillis
-                                    }
-                                    val chartEntries = groupedByNight.entries.sortedBy { it.key }.mapIndexed { index, entry ->
-                                        entryOf(index.toFloat(), (entry.value.sumOf { it.sleepDuration?.toDouble() ?: 0.0 } / 60.0).toFloat())
-                                    }
-                                    val chartModelProducer = ChartEntryModelProducer(chartEntries)
-                                    val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
-                                        try {
-                                            val nightMillis = groupedByNight.keys.sorted()[value.toInt()]
-                                            SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(nightMillis))
-                                        } catch (_: Exception) {
-                                            ""
-                                        }
-                                    }
-                                    ProvideChartStyle(rememberChartStyle()) {
-                                        val primaryColor = MaterialTheme.colorScheme.primary
-                                        Chart(
-                                            chart = lineChart(
-                                                lines = listOf(
-                                                    LineChart.LineSpec(
-                                                        lineColor = primaryColor.toArgb(),
-                                                        lineThicknessDp = 3f,
-                                                        lineBackgroundShader = verticalGradient(
-                                                            arrayOf(primaryColor.copy(alpha = 0.2f), Color.Transparent),
-                                                            null
-                                                        )
-                                                    )
-                                                )
-                                            ),
-                                            model = chartModelProducer.getModel()!!,
-                                            startAxis = rememberStartAxis(),
-                                            bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter)
-                                        )
-                                    }
+                                if (selectedDateSleepData.isNotEmpty()) {
+                                    SleepStagesChart(sleepData = selectedDateSleepData)
                                 }
                             }
                             items(selectedDateSleepData) { data ->
@@ -528,4 +459,66 @@ fun overlapMinutes(data: HealthData, dayStart: Long, dayEnd: Long): Int {
     val overlapStart = maxOf(sleepStart, dayStart)
     val overlapEnd = minOf(sleepEnd, dayEnd)
     return if (overlapEnd > overlapStart) ((overlapEnd - overlapStart) / 60000).toInt() else 0
+}
+
+@Composable
+fun SleepStagesChart(sleepData: List<HealthData>) {
+    val validSleepData = sleepData.filter { (it.sleepDuration ?: 0L) > 0 }
+    if (validSleepData.isEmpty()) return
+
+    val totalDuration = validSleepData.sumOf { it.sleepDuration ?: 0L }
+    if (totalDuration == 0L) return
+
+    Card(modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Sleep Stages", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .clip(RoundedCornerShape(8.dp))) {
+                validSleepData.sortedBy { it.timestamp }.forEach { segment ->
+                    val stage = segment.activityType
+                    val duration = segment.sleepDuration ?: 0L
+                    val color = when (stage) {
+                        "Awake" -> Color(0xFFE0E0E0)
+                        "Light sleep" -> Color(0xFF81D4FA)
+                        "Deep sleep" -> Color(0xFF29B6F6)
+                        "REM sleep" -> Color(0xFF039BE5)
+                        "Sleep" -> Color(0xFFB3E5FC)
+                        else -> Color.Gray
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(duration.toFloat())
+                            .fillMaxHeight()
+                            .background(color)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                SleepStageLegendItem("Light", Color(0xFF81D4FA))
+                SleepStageLegendItem("Deep", Color(0xFF29B6F6))
+                SleepStageLegendItem("REM", Color(0xFF039BE5))
+                SleepStageLegendItem("Awake", Color(0xFFE0E0E0))
+            }
+        }
+    }
+}
+
+@Composable
+fun SleepStageLegendItem(name: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier
+            .size(10.dp)
+            .background(color))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text = name, fontSize = 12.sp)
+    }
 }

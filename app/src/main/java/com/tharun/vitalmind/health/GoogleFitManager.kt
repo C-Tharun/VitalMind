@@ -153,12 +153,13 @@ class GoogleFitManager(private val context: Context) {
                             val segmentStart = dataPoint.getStartTime(TimeUnit.MILLISECONDS)
                             val segmentEnd = dataPoint.getEndTime(TimeUnit.MILLISECONDS)
                             val duration = segmentEnd - segmentStart
+                            val durationInMinutes = TimeUnit.MILLISECONDS.toMinutes(duration)
 
-                            if (duration > 0) {
+                            if (durationInMinutes > 0) {
                                 HealthData(
                                     userId = account.id!!,
                                     timestamp = segmentStart,
-                                    sleepDuration = TimeUnit.MILLISECONDS.toMinutes(duration),
+                                    sleepDuration = durationInMinutes,
                                     activityType = getSleepStageString(sleepStage), // Store sleep stage as a string
                                     heartRate = null, steps = null, calories = null, distance = null, heartPoints = null
                                 )
