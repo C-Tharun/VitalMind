@@ -30,38 +30,38 @@ class GoogleFitManager(private val context: Context) {
         val end = Instant.now()
         val start = ZonedDateTime.ofInstant(end, ZoneId.systemDefault()).toLocalDate()
             .atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val isSteps = dataType == DataType.TYPE_STEP_COUNT_DELTA
-        val isCalories = dataType == DataType.TYPE_CALORIES_EXPENDED
-        val request = if (isSteps) {
-            DataReadRequest.Builder()
-                .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                .bucketByTime(1, TimeUnit.DAYS)
-                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
-                .build()
-        } else if (isCalories) {
-            DataReadRequest.Builder()
-                .aggregate(DataType.TYPE_CALORIES_EXPENDED, DataType.AGGREGATE_CALORIES_EXPENDED)
-                .bucketByTime(1, TimeUnit.DAYS)
-                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
-                .build()
-        } else {
-            DataReadRequest.Builder()
-                .read(dataType)
-                .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
-                .build()
-        }
+
+        val request = DataReadRequest.Builder()
+            .aggregate(dataType)
+            .bucketByTime(1, TimeUnit.DAYS)
+            .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
+            .build()
+
         val response = Fitness.getHistoryClient(context, account).readData(request).await()
-        val sum = if (isSteps || isCalories) {
-            response.buckets.sumOf { bucket ->
-                bucket.dataSets.sumOf { dataSet ->
-                    dataSet.dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
-                }
+        val sum = response.buckets.sumOf { bucket ->
+            bucket.dataSets.sumOf { dataSet ->
+                dataSet.dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
             }
-        } else {
-            response.getDataSet(dataType).dataPoints.sumOf { it.getValue(field).asFloat().toDouble() }
         }
         return if (sum > 0) sum.toFloat() else null
     }
+
+    private suspend fun fetchLatest(
+        account: com.google.android.gms.auth.api.signin.GoogleSignInAccount,
+        dataType: DataType,
+        field: Field
+    ): Float? {
+        val end = Instant.now()
+        val start = end.minus(24, ChronoUnit.HOURS)
+        val request = DataReadRequest.Builder()
+            .read(dataType)
+            .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
+            .build()
+        val response = Fitness.getHistoryClient(context, account).readData(request).await()
+        return response.getDataSet(dataType).dataPoints
+            .maxByOrNull { it.getEndTime(TimeUnit.MILLISECONDS) }?.getValue(field)?.asFloat()
+    }
+
 
     suspend fun readTodaySummary(): HealthData {
         val account = getGoogleAccount() ?: throw IllegalStateException("Google Fit account not signed in.")
@@ -70,12 +70,16 @@ class GoogleFitManager(private val context: Context) {
         val start = ZonedDateTime.ofInstant(end, ZoneId.systemDefault()).toLocalDate()
             .atStartOfDay(ZoneId.systemDefault()).toInstant()
 
-        val heartRate = fetchLatestHeartRate(account, start, end)
+        val heartRate = fetchLatest(account, DataType.TYPE_HEART_RATE_BPM, Field.FIELD_BPM)
         val steps = fetchSumForToday(account, DataType.TYPE_STEP_COUNT_DELTA, Field.FIELD_STEPS)?.toInt()
-        val calories = fetchSumForToday(account, DataType.TYPE_CALORIES_EXPENDED, Field.FIELD_CALORIES)
-        val distance = fetchSumForToday(account, DataType.TYPE_DISTANCE_DELTA, Field.FIELD_DISTANCE)?.let { it / 1000 }
+        val calories = fetchSumForToday(account, DataType.AGGREGATE_CALORIES_EXPENDED, Field.FIELD_CALORIES)
+        val distance = fetchSumForToday(account, DataType.AGGREGATE_DISTANCE_DELTA, Field.FIELD_DISTANCE)?.let { it / 1000 }
         val sleepDuration = fetchSleepDuration(account, start, end)
         val lastActivity = fetchLastActivity(account, start, end)
+        val weight = fetchLatest(account, DataType.TYPE_WEIGHT, Field.FIELD_WEIGHT)
+        // Floors climbed is not available in Google Fit API, set to null
+        val floorsClimbed = null
+        val moveMinutes = fetchSumForToday(account, DataType.TYPE_MOVE_MINUTES, Field.FIELD_DURATION)?.toInt()
 
         return HealthData(
             userId = account.id ?: "guest",
@@ -84,9 +88,11 @@ class GoogleFitManager(private val context: Context) {
             steps = steps,
             calories = calories,
             distance = distance,
-            heartPoints = 0, // Default value as it's disabled
             sleepDuration = sleepDuration,
-            activityType = lastActivity
+            activityType = lastActivity,
+            weight = weight,
+            floorsClimbed = floorsClimbed,
+            moveMinutes = moveMinutes
         )
     }
 
@@ -113,12 +119,6 @@ class GoogleFitManager(private val context: Context) {
                                 userId = account.id!!,
                                 timestamp = dataPoint.getStartTime(TimeUnit.MILLISECONDS),
                                 heartRate = dataPoint.getValue(Field.FIELD_AVERAGE).asFloat(),
-                                steps = null,
-                                calories = null,
-                                distance = null,
-                                sleepDuration = null,
-                                activityType = null,
-                                heartPoints = null
                             )
                         } catch (e: Exception) {
                             Log.e("GoogleFitManager", "Error processing heart rate data point from bucket", e)
@@ -161,7 +161,6 @@ class GoogleFitManager(private val context: Context) {
                                     timestamp = segmentStart,
                                     sleepDuration = durationInMinutes,
                                     activityType = getSleepStageString(sleepStage), // Store sleep stage as a string
-                                    heartRate = null, steps = null, calories = null, distance = null, heartPoints = null
                                 )
                             } else null
                         }
@@ -191,7 +190,6 @@ class GoogleFitManager(private val context: Context) {
                 HealthData(
                     userId = account.id!!,
                     timestamp = timestamp,
-                    heartRate = null,
                     steps = if (metricType == MetricType.STEPS) dataPoint.getValue(field).asInt() else null,
                     calories = if (metricType == MetricType.CALORIES) dataPoint.getValue(field)
                         .asFloat() else null,
@@ -200,8 +198,7 @@ class GoogleFitManager(private val context: Context) {
                     sleepDuration = if (metricType == MetricType.SLEEP) (dataPoint.getEndTime(TimeUnit.MILLISECONDS) - dataPoint.getStartTime(
                         TimeUnit.MILLISECONDS
                     )) / 60000 else null,
-                    activityType = activityType,
-                    heartPoints = null
+                    activityType = activityType
                 )
             } catch (e: Exception) {
                 Log.e("GoogleFitManager", "Error processing data point for $metricType", e)
@@ -218,22 +215,10 @@ class GoogleFitManager(private val context: Context) {
             MetricType.DISTANCE -> DataType.AGGREGATE_DISTANCE_DELTA to Field.FIELD_DISTANCE
             MetricType.SLEEP -> DataType.TYPE_SLEEP_SEGMENT to Field.FIELD_SLEEP_SEGMENT_TYPE
             MetricType.ACTIVITY -> DataType.TYPE_ACTIVITY_SEGMENT to Field.FIELD_ACTIVITY
-            MetricType.HEART_POINTS -> DataType.TYPE_HEART_POINTS to Field.FIELD_INTENSITY
+            MetricType.WEIGHT -> DataType.TYPE_WEIGHT to Field.FIELD_WEIGHT
+            MetricType.FLOORS_CLIMBED -> DataType.TYPE_HEIGHT to Field.FIELD_HEIGHT // Placeholder, update if correct type is found
+            MetricType.MOVE_MINUTES -> DataType.TYPE_MOVE_MINUTES to Field.FIELD_DURATION
         }
-    }
-
-    private suspend fun fetchLatestHeartRate(
-        account: com.google.android.gms.auth.api.signin.GoogleSignInAccount,
-        start: Instant,
-        end: Instant
-    ): Float? {
-        val request = DataReadRequest.Builder()
-            .read(DataType.TYPE_HEART_RATE_BPM)
-            .setTimeRange(start.toEpochMilli(), end.toEpochMilli(), TimeUnit.MILLISECONDS)
-            .build()
-        val response = Fitness.getHistoryClient(context, account).readData(request).await()
-        return response.getDataSet(DataType.TYPE_HEART_RATE_BPM).dataPoints.maxByOrNull { it.getEndTime(TimeUnit.MILLISECONDS) }
-            ?.getValue(Field.FIELD_BPM)?.asFloat()
     }
 
     private suspend fun fetchSleepDuration(

@@ -45,7 +45,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val totalCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
                 val totalDistance = todayData.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
                 val latestHeartRate = todayData.filter { it.heartRate != null }.maxByOrNull { it.timestamp }?.heartRate
-                val latestSleep = todayData.filter { it.sleepDuration != null }.maxByOrNull { it.timestamp }?.sleepDuration
                 val lastActivityData = todayData.filter { it.activityType != null }.maxByOrNull { it.timestamp }
 
                 val weeklySteps = getWeeklyData(data, "E") { it.steps?.toFloat() ?: 0f }
@@ -53,6 +52,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val latestWeight = todayData.filter { it.weight != null }.maxByOrNull { it.timestamp }?.weight
                 val totalFloorsClimbed = todayData.sumOf { it.floorsClimbed?.toDouble() ?: 0.0 }.toFloat()
                 val totalMoveMinutes = todayData.sumOf { it.moveMinutes ?: 0 }
+                val latestBodyTemp = todayData.filter { it.bodyTemperature != null }.maxByOrNull { it.timestamp }?.bodyTemperature
+                val latestSpo2 = todayData.filter { it.bloodOxygenSaturation != null }.maxByOrNull { it.timestamp }?.bloodOxygenSaturation
+
 
                 // Calculate total sleep for today by summing all sleep sessions overlapping today using overlapMinutes
                 val totalSleepMinutes = getTotalSleepForDate(data)
@@ -63,16 +65,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     calories = if (totalCalories > 0f) String.format("%.0f", totalCalories) else "--",
                     steps = if (totalSteps > 0) totalSteps.toString() else "--",
                     distance = if (totalDistance > 0f) String.format("%.2f", totalDistance) else "--",
-                    heartPoints = "0", // Disabled
                     sleepDuration = if (totalSleepMinutes > 0) "${totalSleepMinutes / 60}h ${totalSleepMinutes % 60}m" else "--",
                     lastActivity = lastActivityData?.activityType ?: "None",
                     lastActivityTime = lastActivityData?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
                     weeklySteps = weeklySteps,
                     weeklyCalories = weeklyCalories,
-                    weeklyHeartPoints = emptyList(), // Disabled
                     weight = latestWeight?.let { String.format("%.1f", it) } ?: "--",
                     floorsClimbed = if (totalFloorsClimbed > 0f) String.format("%.0f", totalFloorsClimbed) else "--",
-                    moveMinutes = if (totalMoveMinutes > 0) totalMoveMinutes.toString() else "--"
+                    moveMinutes = if (totalMoveMinutes > 0) totalMoveMinutes.toString() else "--",
+                    bodyTemperature = latestBodyTemp?.let { String.format("%.1f", it) } ?: "--",
+                    bloodOxygenSaturation = latestSpo2?.let { String.format("%.1f", it) } ?: "--"
                 )
             }
         } else {
@@ -208,8 +210,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     HealthData(
                         userId = if (filteredData.isNotEmpty()) filteredData.first().userId else "",
                         timestamp = intervalStart,
-                        steps = stepsInInterval,
-                        calories = null, distance = null, heartRate = null, sleepDuration = null, activityType = null, heartPoints = null
+                        steps = stepsInInterval
                     )
                 }
             }
@@ -284,7 +285,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 distance = if (metricType == MetricType.DISTANCE) totalDistance else null,
                                 calories = if (metricType == MetricType.CALORIES) totalCalories else null,
                                 timestamp = TimeUnit.HOURS.toMillis(hour),
-                                steps = null, heartRate = null, sleepDuration = null, activityType = null, heartPoints = null
                             )
                         }
                 }
@@ -338,12 +338,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val startTime = cal.timeInMillis
                 // Sync for all main metrics
                 MetricType.values().forEach { metricType ->
-                    if (metricType != MetricType.HEART_POINTS) { // skip disabled
-                        try {
-                            repository.syncHistoricalData(userId, startTime, endTime, metricType)
-                        } catch (e: Exception) {
-                            Log.e("MainViewModel", "Failed to sync $metricType for last 7 days", e)
-                        }
+                    try {
+                        repository.syncHistoricalData(userId, startTime, endTime, metricType)
+                    } catch (e: Exception) {
+                        Log.e("MainViewModel", "Failed to sync $metricType for last 7 days", e)
                     }
                 }
             }

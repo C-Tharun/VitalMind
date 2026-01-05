@@ -9,11 +9,12 @@ data class HealthData(
     val heartRate: Float? = null,
     val steps: Int? = null,
     val calories: Float? = null,
-    val heartPoints: Int? = null,
     val distance: Float? = null, // in kilometers
     val activityType: String? = null,
     val sleepDuration: Long? = null, // in minutes
     val weight: Float? = null, // in kg
     val floorsClimbed: Float? = null,
-    val moveMinutes: Int? = null
+    val moveMinutes: Int? = null,
+    val bodyTemperature: Float? = null, // in Celsius
+    val bloodOxygenSaturation: Float? = null // spo2 percentage
 )

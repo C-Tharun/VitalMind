@@ -68,6 +68,8 @@ import com.tharun.vitalmind.ui.DashboardState
 import com.tharun.vitalmind.ui.MainViewModel
 import com.tharun.vitalmind.ui.MetricHistoryScreen
 import com.tharun.vitalmind.ui.MetricType
+import com.tharun.vitalmind.ui.InsightsScreen
+import com.tharun.vitalmind.ui.VitalMindAIScreen
 import com.tharun.vitalmind.ui.theme.*
 import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -255,6 +257,12 @@ class MainActivity : ComponentActivity() {
                     composable("activityHistory") {
                         ActivityHistoryScreen(navController = navController, viewModel = viewModel)
                     }
+                    composable("insights") {
+                        InsightsScreen(viewModel = viewModel)
+                    }
+                    composable("vitalmind_ai") {
+                        VitalMindAIScreen()
+                    }
                 }
             }
         }
@@ -294,7 +302,9 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
             0 -> Dashboard(state, navController)
-            1 -> ProfileScreen(state)
+            1 -> InsightsScreen(viewModel)
+            2 -> VitalMindAIScreen()
+            3 -> ProfileScreen(state)
         }
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -307,7 +317,6 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
 
 @Composable
 fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
-    // Mimic the floating, blurred, rounded bar from the reference image
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -337,10 +346,24 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 modifier = Modifier.weight(1f)
             )
             NavBarItem(
-                icon = Icons.Default.Person,
-                label = "Profile",
+                icon = Icons.Default.Insights,
+                label = "Insights",
                 selected = selectedTab == 1,
                 onClick = { onTabSelected(1) },
+                modifier = Modifier.weight(1f)
+            )
+            NavBarItem(
+                icon = Icons.Default.Chat,
+                label = "VitalMind AI",
+                selected = selectedTab == 2,
+                onClick = { onTabSelected(2) },
+                modifier = Modifier.weight(1f)
+            )
+            NavBarItem(
+                icon = Icons.Default.Person,
+                label = "Profile",
+                selected = selectedTab == 3,
+                onClick = { onTabSelected(3) },
                 modifier = Modifier.weight(1f)
             )
         }

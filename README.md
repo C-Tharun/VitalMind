@@ -156,13 +156,8 @@ This project was developed as a final-year engineering project, demonstrating:
 - Cloud sync & backup
 - Exportable health reports (PDF)
 
-## 👨‍💻 Authors
+## 👨‍💻 Author
 
-- **Tharun Subramanian C**  
-  Final-Year Engineering Student
-
-- **Tavish P**  
-  Final-Year Engineering Student
-
-Project: **VitalMind**
-
+[Your Name]  
+Final-Year Engineering Student  
+Project: VitalMind
