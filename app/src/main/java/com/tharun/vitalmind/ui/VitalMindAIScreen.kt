@@ -12,10 +12,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,7 +22,10 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,7 +66,7 @@ fun generateHealthSummary(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VitalMindAIScreen(
-    dashboardState: DashboardState // Accept DashboardState directly
+    dashboardState: DashboardState
 ) {
     var userMessage by remember { mutableStateOf("") }
     var chatHistory by remember { mutableStateOf(listOf<Message>()) }
@@ -94,11 +93,6 @@ fun VitalMindAIScreen(
         "Am I sleeping well?",
         "What should I do today?"
     )
-    val aiResponses = mapOf(
-        suggestions[0] to "Based on your recent activity data, your movement this week is slightly below your average.",
-        suggestions[1] to "Your sleep duration has varied recently. Maintaining a consistent schedule may help.",
-        suggestions[2] to "A light walk or stretching activity would be beneficial today."
-    )
 
     // Helper to build the prompt for the AI
     fun getPromptMessages(): List<Message> {
@@ -118,14 +112,12 @@ fun VitalMindAIScreen(
                 actions = {
                     IconButton(onClick = {
                         chatHistory = emptyList()
-                        showSuggestions = true
                     }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
             )
         },
-        // Move input above navigation bar by removing bottomBar and placing input inside main Column
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -150,7 +142,7 @@ fun VitalMindAIScreen(
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(8.dp, 8.dp, 8.dp, 80.dp) // leave space for nav bar
+                    .padding(8.dp, 8.dp, 8.dp, 80.dp)
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 400.dp),
                 shape = RoundedCornerShape(32.dp),
@@ -280,9 +272,11 @@ fun VitalMindAIScreen(
 private suspend fun getGroqAIResponse(client: HttpClient, messages: List<Message>): GroqResponse? {
     return try {
         val response = client.post("https://api.groq.com/openai/v1/chat/completions") {
-            header(HttpHeaders.Authorization, "Bearer ${BuildConfig.GROQ_API_KEY}")
-            contentType(ContentType.Application.Json)
-            setBody(GroqRequest("llama-3.1-8b-instant", messages)) // Updated to requested model
+            headers {
+                append(HttpHeaders.Authorization, "Bearer ${BuildConfig.GROQ_API_KEY}")
+                append(HttpHeaders.ContentType, ContentType.Application.Json)
+            }
+            setBody(GroqRequest("llama-3.1-8b-instant", messages))
         }
         response.body<GroqResponse>()
     } catch (e: Exception) {
