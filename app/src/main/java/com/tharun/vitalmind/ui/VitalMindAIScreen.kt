@@ -30,6 +30,7 @@ import kotlinx.serialization.json.Json
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Serializable
 data class GroqRequest(val model: String, val messages: List<Message>)
@@ -66,10 +67,11 @@ fun generateHealthSummary(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VitalMindAIScreen(
-    dashboardState: DashboardState
+    dashboardState: DashboardState,
+    aiViewModel: VitalMindAIViewModel = viewModel()
 ) {
-    var userMessage by remember { mutableStateOf("") }
-    var chatHistory by remember { mutableStateOf(listOf<Message>()) }
+    val userMessage by aiViewModel.userMessage.collectAsState()
+    val chatHistory by aiViewModel.chatHistory.collectAsState()
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var showSuggestions by remember { mutableStateOf(chatHistory.isEmpty()) }
@@ -111,7 +113,9 @@ fun VitalMindAIScreen(
                 title = { Text("VitalMind AI", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = {
-                        chatHistory = emptyList()
+                        aiViewModel.clearHistory()
+                        aiViewModel.clearUserMessage()
+                        showSuggestions = true
                     }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
@@ -167,7 +171,7 @@ fun VitalMindAIScreen(
                                 suggestions.forEach { q ->
                                     OutlinedButton(
                                         onClick = {
-                                            userMessage = q
+                                            aiViewModel.setUserMessage(q)
                                             showSuggestions = false
                                         },
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
@@ -222,7 +226,7 @@ fun VitalMindAIScreen(
                         ) {
                             OutlinedTextField(
                                 value = userMessage,
-                                onValueChange = { userMessage = it },
+                                onValueChange = { aiViewModel.setUserMessage(it) },
                                 modifier = Modifier.weight(1f),
                                 placeholder = { Text("Type your message...") },
                                 singleLine = true
@@ -231,12 +235,9 @@ fun VitalMindAIScreen(
                             Button(
                                 onClick = {
                                     if (userMessage.isNotBlank()) {
-                                        val history = chatHistory.toMutableList()
-                                        history.add(Message("user", userMessage))
-                                        chatHistory = history
-                                        userMessage = ""
+                                        aiViewModel.addUserMessage(userMessage)
+                                        aiViewModel.setUserMessage("")
                                         showSuggestions = false
-                                        // Use real AI call
                                         coroutineScope.launch {
                                             val client = HttpClient(CIO) {
                                                 install(ContentNegotiation) {
@@ -245,7 +246,7 @@ fun VitalMindAIScreen(
                                             }
                                             val response = getGroqAIResponse(client, getPromptMessages())
                                             val aiReply = response?.choices?.firstOrNull()?.message?.content ?: "Sorry, I couldn't get a response from the AI."
-                                            chatHistory = chatHistory + Message("assistant", aiReply)
+                                            aiViewModel.addAIMessage(aiReply)
                                             client.close()
                                         }
                                     }
