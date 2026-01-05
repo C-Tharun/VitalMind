@@ -59,6 +59,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Calculate total sleep for today by summing all sleep sessions overlapping today using overlapMinutes
                 val totalSleepMinutes = getTotalSleepForDate(data)
 
+                // Weekly data computations
+                val weeklyDistance = getWeeklyData(data, "E") { it.distance ?: 0f }
+                val weeklyHeartRate = getWeeklyAverageData(data, "E") { it.heartRate ?: 0f }
+                val weeklySleep = getWeeklyData(data, "E") { (it.sleepDuration?.toFloat() ?: 0f) / 60f }
+                val weeklyActivity = (0..6).map { i ->
+                    val dayCal = Calendar.getInstance()
+                    dayCal.add(Calendar.DAY_OF_YEAR, i - 6)
+                    dayCal.set(Calendar.HOUR_OF_DAY, 0)
+                    dayCal.set(Calendar.MINUTE, 0)
+                    dayCal.set(Calendar.SECOND, 0)
+                    dayCal.set(Calendar.MILLISECOND, 0)
+                    val dayStart = dayCal.timeInMillis
+                    val dayEnd = dayStart + 24 * 60 * 60 * 1000
+                    val activities = data.filter { it.timestamp in dayStart until dayEnd && it.activityType != null }
+                        .mapNotNull { it.activityType }
+                        .filterNot { it.equals("Light sleep", true) || it.equals("REM sleep", true) || it.equals("Deep sleep", true) }
+                    val mostFrequent = activities.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: "None"
+                    SimpleDateFormat("E", Locale.getDefault()).format(dayCal.time) to mostFrequent
+                }
+
                 DashboardState(
                     userName = _userName.value,
                     heartRate = latestHeartRate?.toString() ?: "--",
@@ -70,6 +90,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     lastActivityTime = lastActivityData?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
                     weeklySteps = weeklySteps,
                     weeklyCalories = weeklyCalories,
+                    weeklyDistance = weeklyDistance,
+                    weeklyHeartRate = weeklyHeartRate,
+                    weeklySleep = weeklySleep,
+                    weeklyActivity = weeklyActivity,
                     weight = latestWeight?.let { String.format("%.1f", it) } ?: "--",
                     floorsClimbed = if (totalFloorsClimbed > 0f) String.format("%.0f", totalFloorsClimbed) else "--",
                     moveMinutes = if (totalMoveMinutes > 0) totalMoveMinutes.toString() else "--",
@@ -101,6 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 endCal.set(Calendar.HOUR_OF_DAY, 18) // 6 PM on selected day
                 endCal.set(Calendar.MINUTE, 0)
                 endCal.set(Calendar.SECOND, 0)
+                endCal.set(Calendar.MILLISECOND, 0)
                 endTime = endCal.timeInMillis
 
                 val startCal = Calendar.getInstance()
@@ -376,6 +401,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun getWeeklyAverageData(data: List<HealthData>, format: String, valueSelector: (HealthData) -> Float): List<Pair<String, Float>> {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val labelFormat = SimpleDateFormat(format, Locale.getDefault())
+
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val startTime = cal.timeInMillis
+
+        val dailyValues = data
+            .filter { it.timestamp >= startTime }
+            .groupBy { dateFormat.format(Date(it.timestamp)) }
+            .mapValues { entry ->
+                val values = entry.value.map { valueSelector(it) }.filter { it > 0f }
+                if (values.isNotEmpty()) values.average().toFloat() else 0f
+            }
+
+        return (0..6).map { i ->
+            val dayCal = Calendar.getInstance()
+            dayCal.add(Calendar.DAY_OF_YEAR, i - 6)
+            val dayKey = dateFormat.format(dayCal.time)
+            val label = labelFormat.format(dayCal.time)
+            label to (dailyValues[dayKey] ?: 0f)
+        }
+    }
+
     // Helper function to calculate overlap in minutes between a sleep session and a day
     fun overlapMinutes(data: HealthData, dayStart: Long, dayEnd: Long): Int {
         val sleepStart = data.timestamp
@@ -428,6 +482,10 @@ data class HourlyHeartRateData(
     val min: Float,
     val max: Float
 )
+
+
+
+
 
 
 

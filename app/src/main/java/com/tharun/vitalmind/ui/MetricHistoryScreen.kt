@@ -221,6 +221,16 @@ fun MetricHistoryScreen(
                             Text("No history data available for this period.")
                         }
                     } else {
+                        // Add total distance display for distance metric
+                        if (metricType == MetricType.DISTANCE) {
+                            val totalDistance = historyData.sumOf { it.distance?.toDouble() ?: 0.0 }
+                            Text(
+                                "Total Distance: ${String.format(Locale.US, "%.2f", totalDistance)} km",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                         val chartModelProducer = ChartEntryModelProducer(historyData.mapIndexed { index, data ->
                             val value = when(metricType) {
                                 MetricType.CALORIES -> data.calories ?: 0f

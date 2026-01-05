@@ -47,9 +47,10 @@ data class Choice(val message: Message)
 fun generateHealthSummary(
     steps: List<Pair<String, Float>> = emptyList(),
     calories: List<Pair<String, Float>> = emptyList(),
-    distance: String = "--",
-    heartRate: String = "--",
-    sleep: String = "--",
+    distance: List<Pair<String, Float>> = emptyList(),
+    heartRate: List<Pair<String, Float>> = emptyList(),
+    sleep: List<Pair<String, Float>> = emptyList(),
+    activity: List<Pair<String, String>> = emptyList(),
     lastActivity: String = "None",
     lastActivityTime: String = ""
 ): String {
@@ -57,9 +58,10 @@ fun generateHealthSummary(
         append("User's health summary for the past 7 days:\n")
         if (steps.isNotEmpty()) append("Steps: ${steps.joinToString { it.second.toInt().toString() }}\n")
         if (calories.isNotEmpty()) append("Calories: ${calories.joinToString { it.second.toInt().toString() }}\n")
-        if (distance != "--") append("Distance: $distance\n")
-        if (heartRate != "--") append("Heart Rate: $heartRate\n")
-        if (sleep != "--") append("Sleep: $sleep\n")
+        if (distance.isNotEmpty()) append("Distance: ${distance.joinToString { String.format("%.2f", it.second) }}\n")
+        if (heartRate.isNotEmpty()) append("Heart Rate: ${heartRate.joinToString { it.second.toString() }}\n")
+        if (sleep.isNotEmpty()) append("Sleep: ${sleep.joinToString { String.format("%.1f", it.second) }}\n")
+        if (activity.isNotEmpty()) append("Activity: ${activity.joinToString { it.second }}\n")
         if (lastActivity != "None") append("Last Activity: $lastActivity at $lastActivityTime\n")
     }
 }
@@ -81,9 +83,10 @@ fun VitalMindAIScreen(
         generateHealthSummary(
             steps = dashboardState.weeklySteps,
             calories = dashboardState.weeklyCalories,
-            distance = dashboardState.distance,
-            heartRate = dashboardState.heartRate,
-            sleep = dashboardState.sleepDuration,
+            distance = dashboardState.weeklyDistance,
+            heartRate = dashboardState.weeklyHeartRate,
+            sleep = dashboardState.weeklySleep,
+            activity = dashboardState.weeklyActivity,
             lastActivity = dashboardState.lastActivity,
             lastActivityTime = dashboardState.lastActivityTime
         )
@@ -129,19 +132,6 @@ fun VitalMindAIScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Debug: Show the health summary at the top of the chat UI
-            Column(modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)) {
-                Text(
-                    "Debug: Health summary sent to AI:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    healthSummary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             // Chat UI container with rounded corners and elevation
             Surface(
                 modifier = Modifier
