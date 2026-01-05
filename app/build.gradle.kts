@@ -1,8 +1,11 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
     id("com.google.devtools.ksp")
 }
+
+val groqApiKey: String? = project.findProperty("GROQ_API_KEY") as String?
 
 android {
     namespace = "com.tharun.vitalmind"
@@ -15,6 +18,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey ?: ""}\"")
     }
 
     buildTypes {
@@ -34,7 +38,10 @@ android {
 
     kotlinOptions { jvmTarget = "1.8" }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
@@ -74,6 +81,13 @@ dependencies {
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.4.0")
+
+    // Ktor Client
+    implementation("io.ktor:ktor-client-core:2.3.7")
+    implementation("io.ktor:ktor-client-cio:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
