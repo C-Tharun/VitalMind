@@ -1,11 +1,26 @@
+import java.util.Properties
+
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
-    id("com.google.devtools.ksp")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
-val groqApiKey: String? = project.findProperty("GROQ_API_KEY") as String?
+val localPropertiesFile = rootProject.file("local.properties")
+val groqApiKey: String? = if (localPropertiesFile.exists()) {
+    val properties = Properties()
+    properties.load(localPropertiesFile.inputStream())
+    properties.getProperty("GROQ_API_KEY")
+} else {
+    null
+}
+
+if (groqApiKey == null) {
+    println("Warning: 'GROQ_API_KEY' not found in local.properties. The AI chatbot will not work.")
+} else {
+    println("Loaded GROQ_API_KEY from local.properties")
+}
 
 android {
     namespace = "com.tharun.vitalmind"
@@ -88,6 +103,7 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
@@ -98,4 +114,12 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlinx" && requested.name.startsWith("kotlinx-serialization")) {
+            useVersion("1.6.3")
+        }
+    }
 }
