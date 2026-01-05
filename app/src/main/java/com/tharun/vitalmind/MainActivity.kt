@@ -261,7 +261,8 @@ class MainActivity : ComponentActivity() {
                         InsightsScreen(viewModel = viewModel)
                     }
                     composable("vitalmind_ai") {
-                        VitalMindAIScreen()
+                        val state by viewModel.state.collectAsState()
+                        VitalMindAIScreen(dashboardState = state)
                     }
                 }
             }
@@ -303,7 +304,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
         when (selectedTab) {
             0 -> Dashboard(state, navController)
             1 -> InsightsScreen(viewModel)
-            2 -> VitalMindAIScreen()
+            2 -> VitalMindAIScreen(dashboardState = state)
             3 -> ProfileScreen(state)
         }
         Box(

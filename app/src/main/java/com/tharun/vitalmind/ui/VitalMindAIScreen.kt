@@ -25,11 +25,8 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.request.*
-import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,14 +44,49 @@ data class GroqResponse(val choices: List<Choice> = emptyList())
 @Serializable
 data class Choice(val message: Message)
 
+fun generateHealthSummary(
+    steps: List<Pair<String, Float>> = emptyList(),
+    calories: List<Pair<String, Float>> = emptyList(),
+    distance: String = "--",
+    heartRate: String = "--",
+    sleep: String = "--",
+    lastActivity: String = "None",
+    lastActivityTime: String = ""
+): String {
+    return buildString {
+        append("User's health summary for the past 7 days:\n")
+        if (steps.isNotEmpty()) append("Steps: ${steps.joinToString { it.second.toInt().toString() }}\n")
+        if (calories.isNotEmpty()) append("Calories: ${calories.joinToString { it.second.toInt().toString() }}\n")
+        if (distance != "--") append("Distance: $distance\n")
+        if (heartRate != "--") append("Heart Rate: $heartRate\n")
+        if (sleep != "--") append("Sleep: $sleep\n")
+        if (lastActivity != "None") append("Last Activity: $lastActivity at $lastActivityTime\n")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VitalMindAIScreen() {
+fun VitalMindAIScreen(
+    dashboardState: DashboardState // Accept DashboardState directly
+) {
     var userMessage by remember { mutableStateOf("") }
     var chatHistory by remember { mutableStateOf(listOf<Message>()) }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var showSuggestions by remember { mutableStateOf(chatHistory.isEmpty()) }
+
+    // Generate the health summary from DashboardState
+    val healthSummary = remember(dashboardState) {
+        generateHealthSummary(
+            steps = dashboardState.weeklySteps,
+            calories = dashboardState.weeklyCalories,
+            distance = dashboardState.distance,
+            heartRate = dashboardState.heartRate,
+            sleep = dashboardState.sleepDuration,
+            lastActivity = dashboardState.lastActivity,
+            lastActivityTime = dashboardState.lastActivityTime
+        )
+    }
 
     // Placeholder Q&A
     val suggestions = listOf(
@@ -67,6 +99,17 @@ fun VitalMindAIScreen() {
         suggestions[1] to "Your sleep duration has varied recently. Maintaining a consistent schedule may help.",
         suggestions[2] to "A light walk or stretching activity would be beneficial today."
     )
+
+    // Helper to build the prompt for the AI
+    fun getPromptMessages(): List<Message> {
+        val prompt = if (healthSummary.isNotBlank())
+            listOf(Message("system", healthSummary)) + chatHistory
+        else
+            chatHistory
+        // Debug: Log the prompt to Logcat
+        Log.d("VitalMindAI", "Prompt sent to AI: " + prompt.joinToString("\n") { "[${it.role}] ${it.content}" })
+        return prompt
+    }
 
     Scaffold(
         topBar = {
@@ -90,6 +133,19 @@ fun VitalMindAIScreen() {
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Debug: Show the health summary at the top of the chat UI
+            Column(modifier = Modifier.align(Alignment.TopCenter).padding(8.dp)) {
+                Text(
+                    "Debug: Health summary sent to AI:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    healthSummary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             // Chat UI container with rounded corners and elevation
             Surface(
                 modifier = Modifier
@@ -185,12 +241,21 @@ fun VitalMindAIScreen() {
                                     if (userMessage.isNotBlank()) {
                                         val history = chatHistory.toMutableList()
                                         history.add(Message("user", userMessage))
-                                        // Use placeholder response if available, else generic
-                                        val aiReply = aiResponses[userMessage.trim()] ?: "I'm here to help! (Prototype mode)"
-                                        history.add(Message("assistant", aiReply))
                                         chatHistory = history
                                         userMessage = ""
                                         showSuggestions = false
+                                        // Use real AI call
+                                        coroutineScope.launch {
+                                            val client = HttpClient(CIO) {
+                                                install(ContentNegotiation) {
+                                                    json(Json { ignoreUnknownKeys = true })
+                                                }
+                                            }
+                                            val response = getGroqAIResponse(client, getPromptMessages())
+                                            val aiReply = response?.choices?.firstOrNull()?.message?.content ?: "Sorry, I couldn't get a response from the AI."
+                                            chatHistory = chatHistory + Message("assistant", aiReply)
+                                            client.close()
+                                        }
                                     }
                                 },
                                 enabled = userMessage.isNotBlank()
