@@ -391,46 +391,53 @@ fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () 
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(state: DashboardState) {
-    // Mimic the Home UI but show all available/extra data
-    LazyColumn(modifier = Modifier.padding(top = 32.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Profile: ${state.userName}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    ProfileDataRow("Steps", state.steps)
-                    ProfileDataRow("Calories", state.calories)
-                    ProfileDataRow("Distance", state.distance)
-                    ProfileDataRow("Heart Rate", state.heartRate)
-                    ProfileDataRow("Sleep Duration", state.sleepDuration)
-                    ProfileDataRow("Last Activity", state.lastActivity)
-                    ProfileDataRow("Weight", state.weight)
-                    ProfileDataRow("Floors Climbed", state.floorsClimbed)
-                    ProfileDataRow("Move Minutes", state.moveMinutes)
-                    // Add more as needed
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Profile") })
         }
-        // Optionally, add more profile-specific cards or charts here
+    ) { padding ->
+        LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Profile: ${state.userName}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        ProfileDataRow("Steps", state.steps)
+                        ProfileDataRow("Calories", state.calories)
+                        ProfileDataRow("Distance", state.distance)
+                        ProfileDataRow("Heart Rate", state.heartRate)
+                        ProfileDataRow("Sleep Duration", state.sleepDuration)
+                        ProfileDataRow("Last Activity", state.lastActivity)
+                        ProfileDataRow("Weight", state.weight)
+                        ProfileDataRow("Floors Climbed", state.floorsClimbed)
+                        ProfileDataRow("Move Minutes", state.moveMinutes)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+            // Optionally, add more profile-specific cards or charts here
+        }
     }
 }
 
 @Composable
 fun ProfileDataRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
@@ -595,6 +602,7 @@ fun heartPath(width: Float, height: Float, scale: Float): androidx.compose.ui.gr
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(state: DashboardState, navController: NavController) {
     var stepsGoal by remember { mutableStateOf(8000f) }
@@ -610,63 +618,69 @@ fun Dashboard(state: DashboardState, navController: NavController) {
         HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, LightGreen),
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
-    LazyColumn(modifier = Modifier.padding(top = 32.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Welcome, ${state.userName}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            MultiMetricHeartRings(
-                steps = steps,
-                stepsGoal = stepsGoal,
-                kcal = kcal,
-                kcalGoal = kcalGoal,
-                distance = distance,
-                distanceGoal = distanceGoal,
-                onGoalsChange = { s, k, d ->
-                    stepsGoal = s
-                    kcalGoal = k
-                    distanceGoal = d
-                }
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Home") })
         }
-        item {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(580.dp) // Adjusted height for 3 rows
-            ) {
-                items(summaryMetrics) { metric ->
-                    NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+    ) { padding ->
+        LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Welcome, ${state.userName}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                MultiMetricHeartRings(
+                    steps = steps,
+                    stepsGoal = stepsGoal,
+                    kcal = kcal,
+                    kcalGoal = kcalGoal,
+                    distance = distance,
+                    distanceGoal = distanceGoal,
+                    onGoalsChange = { s, k, d ->
+                        stepsGoal = s
+                        kcalGoal = k
+                        distanceGoal = d
+                    }
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+            item {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.height(580.dp)
+                ) {
+                    items(summaryMetrics) { metric ->
+                        NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+                    }
                 }
             }
-        }
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-            SectionTitle(title = "Last Activity", icon = Icons.Default.History)
-            Spacer(modifier = Modifier.height(16.dp))
-            LastActivityCard(activity = state.lastActivity, time = state.lastActivityTime) {
-                navController.navigate("activityHistory")
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                SectionTitle(title = "Last Activity", icon = Icons.Default.History)
+                Spacer(modifier = Modifier.height(16.dp))
+                LastActivityCard(activity = state.lastActivity, time = state.lastActivityTime) {
+                    navController.navigate("activityHistory")
+                }
             }
-        }
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-            SectionTitle(title = "Weekly Trends", icon = Icons.Default.ShowChart)
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        item {
-            WeeklyChart(state.weeklySteps, "Steps")
-        }
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        item {
-            WeeklyChart(state.weeklyCalories, "Calories")
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                SectionTitle(title = "Weekly Trends", icon = Icons.Default.ShowChart)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            item {
+                WeeklyChart(state.weeklySteps, "Steps")
+            }
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            item {
+                WeeklyChart(state.weeklyCalories, "Calories")
+            }
         }
     }
 }
