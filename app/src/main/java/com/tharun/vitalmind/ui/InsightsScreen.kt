@@ -1,17 +1,16 @@
 package com.tharun.vitalmind.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,34 +18,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import com.tharun.vitalmind.ui.MetricType
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.SmartToy
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsScreen(viewModel: MainViewModel) {
-    val state by viewModel.state.collectAsState()
     val baselineInsights by viewModel.baselineInsights.collectAsState()
     val aiExplanations by viewModel.aiExplanations.collectAsState()
     val weather by viewModel.weather.collectAsState()
-    val recommendationContext by viewModel.recommendationContext.collectAsState()
     val aiRecommendation by viewModel.aiRecommendation.collectAsState()
     val aiExpanded = remember { mutableStateMapOf<Int, Boolean>() }
     // Trigger baseline computation on load
@@ -58,9 +51,9 @@ fun InsightsScreen(viewModel: MainViewModel) {
     LaunchedEffect(weather, baselineInsights) {
         viewModel.prepareRecommendationContext()
     }
-    LaunchedEffect(recommendationContext) {
-        if (recommendationContext != null) viewModel.generateAIRecommendation()
-    }
+
+    val coroutineScope = rememberCoroutineScope()
+    val isLoading = aiRecommendation == null
 
     Scaffold(
         topBar = {
@@ -154,8 +147,24 @@ fun InsightsScreen(viewModel: MainViewModel) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = aiRecommendation ?: "Loading recommendation...",
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                // Refresh icon
+                                IconButton(onClick = {
+                                    coroutineScope.launch {
+                                        viewModel.generateAIRecommendation()
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh Recommendation",
+                                        tint = if (isLoading) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
+                            if (isLoading) {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             // Weather info widget
