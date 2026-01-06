@@ -22,6 +22,20 @@ if (groqApiKey == null) {
     println("Loaded GROQ_API_KEY from local.properties")
 }
 
+val weatherApiKey: String? = if (localPropertiesFile.exists()) {
+    val properties = Properties()
+    properties.load(localPropertiesFile.inputStream())
+    properties.getProperty("WEATHER_API_KEY")
+} else {
+    null
+}
+
+if (weatherApiKey == null) {
+    println("Warning: 'WEATHER_API_KEY' not found in local.properties. Weather features will not work.")
+} else {
+    println("Loaded WEATHER_API_KEY from local.properties")
+}
+
 android {
     namespace = "com.tharun.vitalmind"
     compileSdk = 36
@@ -34,6 +48,7 @@ android {
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey ?: ""}\"")
+        buildConfigField("String", "WEATHER_API_KEY", "\"${weatherApiKey ?: ""}\"")
     }
 
     buildTypes {

@@ -8,9 +8,17 @@ import com.tharun.vitalmind.data.AppDatabase
 import com.tharun.vitalmind.data.HealthData
 import com.tharun.vitalmind.data.HealthDataRepository
 import com.tharun.vitalmind.health.GoogleFitManager
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -467,6 +475,148 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ((maxEnd - minStart) / 60000).toInt()
         } else 0
     }
+
+    data class BaselineInsight(
+        val metric: MetricType,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector?,
+        val metricName: String,
+        val todayValue: Float,
+        val baseline: Float,
+        val deviationPercent: Float,
+        val status: String // "Above baseline", "Below baseline", "Consistent"
+    )
+
+    private val _baselineInsights = MutableStateFlow<List<BaselineInsight>>(emptyList())
+    val baselineInsights: StateFlow<List<BaselineInsight>> = _baselineInsights
+
+    private val _aiExplanations = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val aiExplanations: StateFlow<Map<Int, String>> = _aiExplanations.asStateFlow()
+
+    fun requestAIExplanation(idx: Int, prompt: String) {
+        viewModelScope.launch {
+            val explanation = getGroqAIExplanation(prompt)
+            _aiExplanations.value = _aiExplanations.value.toMutableMap().apply { put(idx, explanation) }
+        }
+    }
+
+    suspend fun getGroqAIExplanation(prompt: String): String {
+        return try {
+            val client = HttpClient(CIO) {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+            }
+            val response = client.post("https://api.groq.com/openai/v1/chat/completions") {
+                headers {
+                    append(HttpHeaders.Authorization, "Bearer " + com.tharun.vitalmind.BuildConfig.GROQ_API_KEY)
+                    append(HttpHeaders.ContentType, ContentType.Application.Json)
+                }
+                setBody(com.tharun.vitalmind.ui.GroqRequest("llama-3.1-8b-instant", listOf(com.tharun.vitalmind.ui.Message("system", prompt))))
+            }
+            val ai = response.body<com.tharun.vitalmind.ui.GroqResponse>()
+            client.close()
+            ai.choices.firstOrNull()?.message?.content ?: "No explanation available."
+        } catch (e: Exception) {
+            "AI explanation unavailable."
+        }
+    }
+
+    fun computeBaselineInsights() {
+        viewModelScope.launch {
+            val userId = _userId.value ?: return@launch
+            val allData = repository.getHealthData(userId).firstOrNull() ?: return@launch
+            val todayCal = Calendar.getInstance()
+            todayCal.set(Calendar.HOUR_OF_DAY, 0)
+            todayCal.set(Calendar.MINUTE, 0)
+            todayCal.set(Calendar.SECOND, 0)
+            todayCal.set(Calendar.MILLISECOND, 0)
+            val todayStart = todayCal.timeInMillis
+            val now = System.currentTimeMillis()
+            val last7DaysStart = todayStart - 6 * 24 * 60 * 60 * 1000L
+            val last7DaysData = allData.filter { it.timestamp in last7DaysStart..now }
+            val todayData = allData.filter { it.timestamp in todayStart..now }
+
+            // Steps
+            val stepsList = last7DaysData.groupBy { dayKey(it.timestamp) }.mapValues { it.value.sumOf { d -> d.steps ?: 0 } }
+            val stepsValues = stepsList.values.toList()
+            val stepsBaseline = if (stepsValues.size > 1) stepsValues.dropLast(1).average().toFloat() else 0f
+            val todaySteps = todayData.sumOf { it.steps ?: 0 }.toFloat()
+            val stepsDeviation = percentDeviation(todaySteps, stepsBaseline)
+            val stepsStatus = deviationStatus(stepsDeviation)
+
+            // Calories
+            val caloriesList = last7DaysData.groupBy { dayKey(it.timestamp) }.mapValues { it.value.sumOf { d -> d.calories?.toDouble() ?: 0.0 }.toFloat() }
+            val caloriesValues = caloriesList.values.toList()
+            val caloriesBaseline = if (caloriesValues.size > 1) caloriesValues.dropLast(1).average().toFloat() else 0f
+            val todayCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+            val caloriesDeviation = percentDeviation(todayCalories, caloriesBaseline)
+            val caloriesStatus = deviationStatus(caloriesDeviation)
+
+            // Sleep (in minutes)
+            val sleepList = last7DaysData.groupBy { dayKey(it.timestamp) }.mapValues { day ->
+                // Use getTotalSleepForDate for each day for consistency with sleep history
+                val dayCal = Calendar.getInstance()
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val date = dateFormat.parse(day.key)
+                dayCal.time = date
+                getTotalSleepForDate(day.value, dayCal.timeInMillis).toFloat()
+            }
+            // Exclude days with 0 sleep from baseline calculation
+            val sleepValues = sleepList.values.toList().filter { it > 0f }
+            val sleepBaseline = if (sleepValues.size > 1) sleepValues.dropLast(1).average().toFloat() else 0f
+            // Use getTotalSleepForDate for today as well
+            val todaySleep = getTotalSleepForDate(todayData, todayStart).toFloat()
+            val sleepDeviation = percentDeviation(todaySleep, sleepBaseline)
+            val sleepStatus = deviationStatus(sleepDeviation)
+
+            _baselineInsights.value = listOf(
+                BaselineInsight(
+                    metric = MetricType.STEPS,
+                    icon = null, // Set in UI
+                    metricName = "Steps",
+                    todayValue = todaySteps,
+                    baseline = stepsBaseline,
+                    deviationPercent = stepsDeviation,
+                    status = stepsStatus
+                ),
+                BaselineInsight(
+                    metric = MetricType.SLEEP,
+                    icon = null, // Set in UI
+                    metricName = "Sleep Duration",
+                    todayValue = todaySleep,
+                    baseline = sleepBaseline,
+                    deviationPercent = sleepDeviation,
+                    status = sleepStatus
+                ),
+                BaselineInsight(
+                    metric = MetricType.CALORIES,
+                    icon = null, // Set in UI
+                    metricName = "Calories",
+                    todayValue = todayCalories,
+                    baseline = caloriesBaseline,
+                    deviationPercent = caloriesDeviation,
+                    status = caloriesStatus
+                )
+            )
+        }
+    }
+
+    private fun dayKey(timestamp: Long): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        return dateFormat.format(Date(timestamp))
+    }
+
+    private fun percentDeviation(today: Float, baseline: Float): Float {
+        return if (baseline == 0f) 0f else ((today - baseline) / baseline) * 100f
+    }
+
+    private fun deviationStatus(deviation: Float): String {
+        return when {
+            deviation > 10f -> "Above baseline"
+            deviation < -10f -> "Below baseline"
+            else -> "Consistent"
+        }
+    }
 }
 
 data class HeartRateHistoryState(
@@ -491,12 +641,3 @@ data class HourlyHeartRateData(
     val min: Float,
     val max: Float
 )
-
-
-
-
-
-
-
-
-
