@@ -455,8 +455,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val dayStart = cal.timeInMillis
         cal.add(Calendar.DATE, 1)
         val dayEnd = cal.timeInMillis
-        return data.filter { it.sleepDuration != null }
-            .sumOf { overlapMinutes(it, dayStart, dayEnd) }
+        val sleepData = data.filter { it.sleepDuration != null && (
+            (it.timestamp < dayEnd && (it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000) > dayStart)
+        ) }
+        return if (sleepData.isNotEmpty()) {
+            val minStart = sleepData.minOf { it.timestamp }
+            var maxEnd = sleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
+            if (maxEnd < minStart) {
+                maxEnd += 24 * 60 * 60 * 1000 // handle crossing midnight
+            }
+            ((maxEnd - minStart) / 60000).toInt()
+        } else 0
     }
 }
 
@@ -482,6 +491,8 @@ data class HourlyHeartRateData(
     val min: Float,
     val max: Float
 )
+
+
 
 
 

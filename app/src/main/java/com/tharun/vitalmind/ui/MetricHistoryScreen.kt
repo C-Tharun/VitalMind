@@ -175,7 +175,14 @@ fun MetricHistoryScreen(
                         val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
                         sleepStart < dayEnd && sleepEnd > dayStart
                     }
-                    val selectedTotalSleep = selectedDateSleepData.sumOf { overlapMinutes(it, dayStart, dayEnd) }
+                    val selectedTotalSleep: Int = if (selectedDateSleepData.isNotEmpty()) {
+                        val minStart = selectedDateSleepData.minOf { it.timestamp }
+                        var maxEnd = selectedDateSleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
+                        if (maxEnd < minStart) {
+                            maxEnd += 24 * 60 * 60 * 1000 // handle crossing midnight
+                        }
+                        ((maxEnd - minStart) / 60000).toInt()
+                    } else 0
 
                     if (selectedTotalSleep == 0 && selectedDateSleepData.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -465,7 +472,11 @@ fun StepsBarChart(chartData: List<HealthData>) {
 // Helper function to calculate overlap in minutes between a sleep session and a day
 fun overlapMinutes(data: HealthData, dayStart: Long, dayEnd: Long): Int {
     val sleepStart = data.timestamp
-    val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
+    var sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
+    // Fix: If sleepEnd is before sleepStart, add 24 hours (in ms) to sleepEnd
+    if (sleepEnd < sleepStart) {
+        sleepEnd += 24 * 60 * 60 * 1000
+    }
     val overlapStart = maxOf(sleepStart, dayStart)
     val overlapEnd = minOf(sleepEnd, dayEnd)
     return if (overlapEnd > overlapStart) ((overlapEnd - overlapStart) / 60000).toInt() else 0
