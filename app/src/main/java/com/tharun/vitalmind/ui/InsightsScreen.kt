@@ -22,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import com.tharun.vitalmind.ui.MetricType
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.SmartToy
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,10 +45,22 @@ fun InsightsScreen(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val baselineInsights by viewModel.baselineInsights.collectAsState()
     val aiExplanations by viewModel.aiExplanations.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
+    val weather by viewModel.weather.collectAsState()
+    val recommendationContext by viewModel.recommendationContext.collectAsState()
+    val aiRecommendation by viewModel.aiRecommendation.collectAsState()
     val aiExpanded = remember { mutableStateMapOf<Int, Boolean>() }
     // Trigger baseline computation on load
-    LaunchedEffect(Unit) { viewModel.computeBaselineInsights() }
+    LaunchedEffect(Unit) {
+        viewModel.fetchWeatherIfNeeded()
+        viewModel.computeBaselineInsights()
+    }
+    // Prepare context and generate recommendation when weather or baseline changes
+    LaunchedEffect(weather, baselineInsights) {
+        viewModel.prepareRecommendationContext()
+    }
+    LaunchedEffect(recommendationContext) {
+        if (recommendationContext != null) viewModel.generateAIRecommendation()
+    }
 
     Scaffold(
         topBar = {
@@ -103,17 +116,100 @@ fun InsightsScreen(viewModel: MainViewModel) {
                             viewModel.requestAIExplanation(idx, prompt)
                             aiExpanded[idx] = true
                         },
-                        onExpandToggle = { aiExpanded[idx] = !(aiExpanded[idx] ?: false) }
+                        onExpandToggle = { aiExpanded[idx] = !(aiExpanded[idx] ?: false) },
+                        showAiIcon = true // Show AI icon for cards with AI explanation
                     )
                 }
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "AI-generated explanation (prototype)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
+                // Smart AI Recommendations section as the last item in the LazyColumn
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "\uD83E\uDD14 Smart AI Recommendations",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.SmartToy,
+                                    contentDescription = "AI",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = aiRecommendation ?: "Loading recommendation...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            // Weather info widget
+                            val w = weather
+                            if (w != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(w.location.name, style = MaterialTheme.typography.labelLarge)
+                                            Text(w.current.condition.text, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("${w.current.temp_c}°C", style = MaterialTheme.typography.titleMedium)
+                                            w.current.airQuality?.usEpaIndex?.let {
+                                                val aqiLabel = when (it) {
+                                                    1, 2 -> "Good"
+                                                    3 -> "Moderate"
+                                                    4, 5 -> "Unhealthy"
+                                                    6 -> "Hazardous"
+                                                    else -> "Unknown"
+                                                }
+                                                Text("AQI: $aqiLabel", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
+                                Icon(
+                                    Icons.Filled.SmartToy,
+                                    contentDescription = "AI",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "AI-generated recommendation (prototype)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "AI-generated explanation (prototype)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.align(Alignment.End)
-            )
         }
     }
 }
@@ -127,7 +223,8 @@ fun InsightCardWithExplain(
     aiExplanation: String?,
     aiExpanded: Boolean,
     onExplain: () -> Unit,
-    onExpandToggle: () -> Unit
+    onExpandToggle: () -> Unit,
+    showAiIcon: Boolean = false
 ) {
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -149,7 +246,18 @@ fun InsightCardWithExplain(
                         .weight(1f)
                         .padding(end = 8.dp)
                 ) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, style = MaterialTheme.typography.titleMedium)
+                        if (showAiIcon) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(
+                                Icons.Filled.SmartToy,
+                                contentDescription = "AI",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(message, style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -161,21 +269,44 @@ fun InsightCardWithExplain(
                 TextButton(
                     onClick = onExplain
                 ) {
+                    Icon(
+                        Icons.Filled.SmartToy,
+                        contentDescription = "AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("Explain")
                 }
             }
             if (aiExplanation != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onExpandToggle) {
+                    Icon(
+                        Icons.Filled.SmartToy,
+                        contentDescription = "AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(if (aiExpanded) "Hide explanation" else "Show explanation")
                 }
                 AnimatedVisibility(visible = aiExpanded) {
-                    Text(
-                        aiExplanation,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            Icons.Filled.SmartToy,
+                            contentDescription = "AI",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            aiExplanation,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         }

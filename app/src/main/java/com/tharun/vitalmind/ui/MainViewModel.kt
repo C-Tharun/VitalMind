@@ -8,6 +8,8 @@ import com.tharun.vitalmind.data.AppDatabase
 import com.tharun.vitalmind.data.HealthData
 import com.tharun.vitalmind.data.HealthDataRepository
 import com.tharun.vitalmind.health.GoogleFitManager
+import com.tharun.vitalmind.data.WeatherApiService
+import com.tharun.vitalmind.data.WeatherApiResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -330,6 +332,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
 
+    private val _weather = MutableStateFlow<WeatherApiResponse?>(null)
+    val weather: StateFlow<WeatherApiResponse?> = _weather
+
+    fun fetchWeatherIfNeeded(city: String = "auto:ip") {
+        viewModelScope.launch {
+            if (_weather.value == null) {
+                _weather.value = WeatherApiService.getTodayWeather(city)
+            }
+        }
+    }
+
     fun setUserIdAndName(userId: String, userName: String?) {
         _userId.value = userId
         _userName.value = userName?.split(" ")?.first() ?: "User"
@@ -615,6 +628,115 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             deviation > 10f -> "Above baseline"
             deviation < -10f -> "Below baseline"
             else -> "Consistent"
+        }
+    }
+
+    data class RecommendationContext(
+        val timeOfDay: String,
+        val stepsDeviation: String,
+        val sleepQuality: String,
+        val sleepMinutes: Int,
+        val distanceKm: Float,
+        val weatherCondition: String?,
+        val temperatureC: Float?,
+        val aqi: String?,
+        val weatherSuitability: String
+    )
+
+    private val _recommendationContext = MutableStateFlow<RecommendationContext?>(null)
+    val recommendationContext: StateFlow<RecommendationContext?> = _recommendationContext
+
+    fun prepareRecommendationContext() {
+        viewModelScope.launch {
+            val baseline = baselineInsights.value
+            val weather = weather.value
+            val now = Calendar.getInstance()
+            val hour = now.get(Calendar.HOUR_OF_DAY)
+            val timeOfDay = when (hour) {
+                in 5..11 -> "morning"
+                in 12..16 -> "afternoon"
+                in 17..21 -> "evening"
+                else -> "night"
+            }
+            val steps = baseline.find { it.metric == MetricType.STEPS }
+            val stepsDeviation = when {
+                steps == null -> "unknown"
+                steps.deviationPercent < -10f -> "below"
+                steps.deviationPercent > 10f -> "above"
+                else -> "normal"
+            }
+            val sleep = baseline.find { it.metric == MetricType.SLEEP }
+            val sleepQuality = when {
+                sleep == null -> "unknown"
+                sleep.todayValue < 360 -> "low" // <6h
+                else -> "normal"
+            }
+            val sleepMinutes = sleep?.todayValue?.toInt() ?: 0
+            val distance = state.value.distance?.toFloatOrNull() ?: 0f
+            val weatherCondition = weather?.current?.condition?.text
+            val temperatureC = weather?.current?.temp_c
+            val aqi = weather?.current?.airQuality?.usEpaIndex?.let {
+                when (it) {
+                    1, 2 -> "good"
+                    3 -> "moderate"
+                    4, 5 -> "unhealthy"
+                    6 -> "hazardous"
+                    else -> null
+                }
+            }
+            val weatherSuitability = if (
+                weatherCondition != null && temperatureC != null && (aqi == null || aqi == "good" || aqi == "moderate") &&
+                weatherCondition.lowercase() in listOf("clear", "partly cloudy", "sunny") && temperatureC in 15f..32f
+            ) "outdoor-friendly" else "outdoor-poor"
+            _recommendationContext.value = RecommendationContext(
+                timeOfDay = timeOfDay,
+                stepsDeviation = stepsDeviation,
+                sleepQuality = sleepQuality,
+                sleepMinutes = sleepMinutes,
+                distanceKm = distance,
+                weatherCondition = weatherCondition,
+                temperatureC = temperatureC,
+                aqi = aqi,
+                weatherSuitability = weatherSuitability
+            )
+        }
+    }
+
+    private val _aiRecommendation = MutableStateFlow<String?>(null)
+    val aiRecommendation: StateFlow<String?> = _aiRecommendation
+
+    fun generateAIRecommendation() {
+        viewModelScope.launch {
+            val ctx = recommendationContext.value
+            if (ctx == null) {
+                _aiRecommendation.value = "Not enough data for a recommendation."
+                return@launch
+            }
+            val prompt = buildString {
+                append("You are a wellness assistant. Based on the user's activity today, usual activity pattern, current time of day, and today's weather conditions, suggest a suitable activity and best time. ")
+                append("Keep your answer concise (1-2 sentences), informative, and to the point. Avoid unnecessary details.\n")
+                append("Context: ")
+                append("Steps today are ")
+                append(
+                    when (ctx.stepsDeviation) {
+                        "below" -> "below normal. "
+                        "above" -> "above normal. "
+                        "normal" -> "normal. "
+                        else -> "unknown. "
+                    }
+                )
+                append("User has walked ${"%.1f".format(ctx.distanceKm)} km today. ")
+                append("It is ${ctx.timeOfDay}. ")
+                append("Weather is ${ctx.weatherCondition ?: "unknown"}, ")
+                append("${ctx.temperatureC?.let { "${it}°C, " } ?: ""}")
+                append("AQI is ${ctx.aqi ?: "unknown"}.")
+            }
+            try {
+                val ai = getGroqAIExplanation(prompt)
+                _aiRecommendation.value = ai
+            } catch (e: Exception) {
+                _aiRecommendation.value = "AI recommendation unavailable."
+            }
         }
     }
 }
