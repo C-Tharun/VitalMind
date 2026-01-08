@@ -70,6 +70,8 @@ import com.tharun.vitalmind.ui.MetricHistoryScreen
 import com.tharun.vitalmind.ui.MetricType
 import com.tharun.vitalmind.ui.InsightsScreen
 import com.tharun.vitalmind.ui.VitalMindAIScreen
+import com.tharun.vitalmind.ui.StressTerrainViewModel
+import com.tharun.vitalmind.ui.StressTerrainMapScreen
 import com.tharun.vitalmind.ui.theme.*
 import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -315,7 +317,13 @@ class MainActivity : ComponentActivity() {
                         ActivityHistoryScreen(navController = navController, viewModel = viewModel)
                     }
                     composable("insights") {
-                        InsightsScreen(viewModel = viewModel)
+                        InsightsScreen(viewModel = viewModel, navController = navController)
+                    }
+                    composable("stress_terrain_map") {
+                        val stressTerrainViewModel: StressTerrainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                        val state by viewModel.state.collectAsState()
+                        stressTerrainViewModel.setUserId(state.userId)
+                        StressTerrainMapScreen(navController = navController, viewModel = stressTerrainViewModel)
                     }
                     composable("vitalmind_ai") {
                         val state by viewModel.state.collectAsState()
@@ -360,7 +368,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
             0 -> Dashboard(state, navController)
-            1 -> InsightsScreen(viewModel)
+            1 -> InsightsScreen(viewModel = viewModel, navController = navController)
             2 -> VitalMindAIScreen(dashboardState = state)
             3 -> ProfileScreen(state)
         }

@@ -90,6 +90,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 DashboardState(
+                    userId = userId,
                     userName = _userName.value,
                     heartRate = latestHeartRate?.toString() ?: "--",
                     calories = if (totalCalories > 0f) String.format("%.0f", totalCalories) else "--",
