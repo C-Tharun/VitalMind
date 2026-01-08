@@ -16,5 +16,7 @@ data class HealthData(
     val floorsClimbed: Float? = null,
     val moveMinutes: Int? = null,
     val bodyTemperature: Float? = null, // in Celsius
-    val bloodOxygenSaturation: Float? = null // spo2 percentage
+    val bloodOxygenSaturation: Float? = null, // spo2 percentage
+    val latitude: Double? = null, // for stress terrain mapping
+    val longitude: Double? = null // for stress terrain mapping
 )

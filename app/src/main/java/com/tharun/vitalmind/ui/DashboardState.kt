@@ -1,6 +1,7 @@
 package com.tharun.vitalmind.ui
 
 data class DashboardState(
+    val userId: String = "",
     val userName: String = "User",
     val heartRate: String = "--",
     val calories: String = "--",

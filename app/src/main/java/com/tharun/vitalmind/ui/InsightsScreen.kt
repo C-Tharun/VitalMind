@@ -35,10 +35,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(viewModel: MainViewModel) {
+fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = null) {
     val baselineInsights by viewModel.baselineInsights.collectAsState()
     val aiExplanations by viewModel.aiExplanations.collectAsState()
     val weather by viewModel.weather.collectAsState()
@@ -126,6 +127,53 @@ fun InsightsScreen(viewModel: MainViewModel) {
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.align(Alignment.End)
                     )
+                }
+                // Stress Terrain Map section
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "🗺️ Stress Terrain Map",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Visualize your physiological stress patterns across locations.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Text(
+                                text = "Uses historical heart rate data to identify stress zones and calming locations. No real-time tracking.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                            Button(
+                                onClick = {
+                                    navController?.navigate("stress_terrain_map")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Info,
+                                    contentDescription = "View Map",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("View Map")
+                            }
+                        }
+                    }
                 }
                 // Smart AI Recommendations section as the last item in the LazyColumn
                 item {
