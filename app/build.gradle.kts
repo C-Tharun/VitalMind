@@ -36,6 +36,20 @@ if (weatherApiKey == null) {
     println("Loaded WEATHER_API_KEY from local.properties")
 }
 
+val googleMapsApiKey: String? = if (localPropertiesFile.exists()) {
+    val properties = Properties()
+    properties.load(localPropertiesFile.inputStream())
+    properties.getProperty("GOOGLE_MAPS_API_KEY")
+} else {
+    null
+}
+
+if (googleMapsApiKey == null) {
+    println("Warning: 'GOOGLE_MAPS_API_KEY' not found in local.properties. Maps features will not work.")
+} else {
+    println("Loaded GOOGLE_MAPS_API_KEY from local.properties")
+}
+
 android {
     namespace = "com.tharun.vitalmind"
     compileSdk = 36
@@ -49,6 +63,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "GROQ_API_KEY", "\"${groqApiKey ?: ""}\"")
         buildConfigField("String", "WEATHER_API_KEY", "\"${weatherApiKey ?: ""}\"")
+        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${googleMapsApiKey ?: ""}\"")
+
+        // Manifest placeholders for API keys
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey ?: ""
     }
 
     buildTypes {
@@ -84,6 +102,10 @@ dependencies {
     implementation("com.google.android.gms:play-services-fitness:21.3.0")
     implementation("com.google.android.gms:play-services-auth:21.4.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+
+    // Google Maps
+    implementation("com.google.maps.android:maps-compose:4.3.0")
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     // AndroidX + Compose
     implementation("androidx.core:core-ktx:1.10.1")
