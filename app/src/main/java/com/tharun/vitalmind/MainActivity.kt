@@ -135,6 +135,33 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // Location permission launcher
+                        val locationPermissionLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission(),
+                        ) { isGranted ->
+                            if (isGranted) {
+                                // Request location and fetch weather
+                                try {
+                                    val fused = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(activity)
+                                    fused.lastLocation.addOnSuccessListener { loc ->
+                                        if (loc != null) {
+                                            viewModel.fetchWeatherForLocation(loc.latitude, loc.longitude)
+                                        } else {
+                                            viewModel.fetchWeatherIfNeeded("auto:ip")
+                                        }
+                                    }.addOnFailureListener {
+                                        viewModel.fetchWeatherIfNeeded("auto:ip")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("MainActivity", "Failed to get location", e)
+                                    viewModel.fetchWeatherIfNeeded("auto:ip")
+                                }
+                            } else {
+                                // Fallback to IP-based weather
+                                viewModel.fetchWeatherIfNeeded("auto:ip")
+                            }
+                        }
+
                         val signInLauncher = rememberLauncherForActivityResult(
                             contract = ActivityResultContracts.StartActivityForResult()
                         ) { result ->
@@ -180,6 +207,7 @@ class MainActivity : ComponentActivity() {
                                 signInError = "Sign-In failed or cancelled."
                             }
                         }
+
 
                         AppScreen(
                             isSignedIn = isSignedIn,
@@ -247,6 +275,35 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(isSignedIn, hasPermission) {
                             if (isSignedIn && hasPermission && signInError == null) {
                                 viewModel.syncLast7DaysData()
+                            }
+                        }
+
+                        // Fetch weather after sign-in using location
+                        LaunchedEffect(isSignedIn) {
+                            if (isSignedIn) {
+                                // Check location permissions and request if needed
+                                val hasCoarse = ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                val hasFine = ContextCompat.checkSelfPermission(activity, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                if (!hasCoarse && !hasFine) {
+                                    locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                                } else {
+                                    // Already have permission, fetch location and weather
+                                    try {
+                                        val fused = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(activity)
+                                        fused.lastLocation.addOnSuccessListener { loc ->
+                                            if (loc != null) {
+                                                viewModel.fetchWeatherForLocation(loc.latitude, loc.longitude)
+                                            } else {
+                                                viewModel.fetchWeatherIfNeeded("auto:ip")
+                                            }
+                                        }.addOnFailureListener {
+                                            viewModel.fetchWeatherIfNeeded("auto:ip")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("MainActivity", "Failed to get location", e)
+                                        viewModel.fetchWeatherIfNeeded("auto:ip")
+                                    }
+                                }
                             }
                         }
                     }

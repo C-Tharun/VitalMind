@@ -129,6 +129,9 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Play Services Location
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }
 
 configurations.all {

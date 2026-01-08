@@ -44,7 +44,8 @@ object WeatherApiService {
 
     suspend fun getTodayWeather(city: String = "auto:ip"): WeatherApiResponse? {
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        if (cachedWeather?.first == today) return cachedWeather?.second
+        val cacheKey = "$today|$city"
+        if (cachedWeather?.first == cacheKey) return cachedWeather?.second
         val apiKey = BuildConfig.WEATHER_API_KEY
         if (apiKey.isNullOrBlank()) return null
         val client = HttpClient(CIO) {
@@ -56,7 +57,7 @@ object WeatherApiService {
                 parameter("q", city)
                 parameter("aqi", "yes")
             }.body()
-            cachedWeather = today to response
+            cachedWeather = cacheKey to response
             response
         } catch (e: Exception) {
             Log.e("WeatherApiService", "Weather API error", e)

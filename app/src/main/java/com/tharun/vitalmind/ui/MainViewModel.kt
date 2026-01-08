@@ -343,6 +343,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun fetchWeatherForLocation(lat: Double, lon: Double) {
+        viewModelScope.launch {
+            val query = "$lat,$lon"
+            _weather.value = WeatherApiService.getTodayWeather(query)
+        }
+    }
+
     fun setUserIdAndName(userId: String, userName: String?) {
         _userId.value = userId
         _userName.value = userName?.split(" ")?.first() ?: "User"

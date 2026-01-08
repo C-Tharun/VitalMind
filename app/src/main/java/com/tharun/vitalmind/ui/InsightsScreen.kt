@@ -16,8 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.setValue
 import com.tharun.vitalmind.ui.MetricType
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
@@ -42,12 +44,15 @@ fun InsightsScreen(viewModel: MainViewModel) {
     val weather by viewModel.weather.collectAsState()
     val aiRecommendation by viewModel.aiRecommendation.collectAsState()
     val aiExpanded = remember { mutableStateMapOf<Int, Boolean>() }
+    val recommendationContext by viewModel.recommendationContext.collectAsState()
+    var hasRequestedRecommendation by remember { mutableStateOf(false) }
+
     // Trigger baseline computation on load
     LaunchedEffect(Unit) {
         viewModel.fetchWeatherIfNeeded()
         viewModel.computeBaselineInsights()
     }
-    // Prepare context and generate recommendation when weather or baseline changes
+    // Prepare context when weather or baseline changes (but don't auto-generate recommendation)
     LaunchedEffect(weather, baselineInsights) {
         viewModel.prepareRecommendationContext()
     }
@@ -137,34 +142,60 @@ fun InsightsScreen(viewModel: MainViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.SmartToy,
-                                    contentDescription = "AI",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = aiRecommendation ?: "Loading recommendation...",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                // Refresh icon
-                                IconButton(onClick = {
-                                    coroutineScope.launch {
-                                        viewModel.generateAIRecommendation()
-                                    }
-                                }) {
+                            if (!hasRequestedRecommendation && aiRecommendation == null) {
+                                // Show button to request recommendation
+                                Button(
+                                    onClick = {
+                                        hasRequestedRecommendation = true
+                                        coroutineScope.launch {
+                                            viewModel.generateAIRecommendation()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
                                     Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = "Refresh Recommendation",
-                                        tint = if (isLoading) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondary
+                                        Icons.Filled.SmartToy,
+                                        contentDescription = "AI",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Click here for AI recommendations", style = MaterialTheme.typography.labelLarge)
                                 }
-                            }
-                            if (isLoading) {
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                            } else {
+                                // Show recommendation with refresh button
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.SmartToy,
+                                        contentDescription = "AI",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = aiRecommendation ?: "Loading recommendation...",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    // Refresh icon
+                                    IconButton(onClick = {
+                                        coroutineScope.launch {
+                                            viewModel.generateAIRecommendation()
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Refresh Recommendation",
+                                            tint = if (isLoading) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                }
+                                if (isLoading) {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                                }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             // Weather info widget
