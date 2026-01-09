@@ -62,14 +62,39 @@ fun MetricHistoryScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(text = "${metricType.name.lowercase().replaceFirstChar { it.uppercase() }} History") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    IconButton(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
+                    Text(
+                        text = "${metricType.name.lowercase().replaceFirstChar { it.uppercase() }} History",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
                 }
-            )
+            }
         }
     ) { padding ->
         Column(
@@ -336,24 +361,29 @@ fun DateSelector(selectedDate: Long, onDateSelected: (Long) -> Unit) {
             val isSelected = cal.get(Calendar.DAY_OF_YEAR) == Calendar.getInstance().apply { timeInMillis = selectedDate }.get(Calendar.DAY_OF_YEAR) &&
                     cal.get(Calendar.YEAR) == Calendar.getInstance().apply { timeInMillis = selectedDate }.get(Calendar.YEAR)
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Surface(
                 modifier = Modifier
                     .padding(horizontal = 8.dp)
                     .clickable { onDateSelected(date) }
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                    .padding(8.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                shadowElevation = if (isSelected) 2.dp else 0.5.dp
             ) {
-                Text(
-                    text = SimpleDateFormat("d", Locale.getDefault()).format(Date(date)),
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    text = SimpleDateFormat("EEE", Locale.getDefault()).format(Date(date)),
-                    fontSize = 12.sp,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 12.dp)
+                ) {
+                    Text(
+                        text = SimpleDateFormat("d", Locale.getDefault()).format(Date(date)),
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = SimpleDateFormat("EEE", Locale.getDefault()).format(Date(date)),
+                        fontSize = 11.sp,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
             }
         }
     }
@@ -361,14 +391,18 @@ fun DateSelector(selectedDate: Long, onDateSelected: (Long) -> Unit) {
 
 @Composable
 fun DailyHeartRateSummary(summary: HeartRateDailySummary) {
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 16.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Daily Summary", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text("Daily Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(12.dp))
             Text("${summary.min.toInt()}-${summary.max.toInt()} bpm", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress = { (summary.max - summary.min) / (220f - 40f) }, // Example range
                 modifier = Modifier.fillMaxWidth()

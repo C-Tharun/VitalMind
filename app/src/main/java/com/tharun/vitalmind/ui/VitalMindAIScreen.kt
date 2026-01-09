@@ -112,18 +112,36 @@ fun VitalMindAIScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("VitalMind AI", fontWeight = FontWeight.Bold) },
-                actions = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "VitalMind AI",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
                     IconButton(onClick = {
                         aiViewModel.clearHistory()
                         aiViewModel.clearUserMessage()
                         showSuggestions = true
                     }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
-            )
+            }
         },
     ) { innerPadding ->
         Box(

@@ -31,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -458,10 +459,51 @@ fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun ModernTopAppBar(title: String, showBackButton: Boolean = true, onBackClick: (() -> Unit)? = null) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (showBackButton) {
+                IconButton(
+                    onClick = { onBackClick?.invoke() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(28.dp).rotate(180f),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun ProfileScreen(state: DashboardState) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Profile") })
+            ModernTopAppBar(title = "Profile", showBackButton = false)
         }
     ) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -476,9 +518,10 @@ fun ProfileScreen(state: DashboardState) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         ProfileDataRow("Steps", state.steps)
                         ProfileDataRow("Calories", state.calories)
                         ProfileDataRow("Distance", state.distance)
@@ -487,7 +530,17 @@ fun ProfileScreen(state: DashboardState) {
                         ProfileDataRow("Last Activity", state.lastActivity)
                         ProfileDataRow("Weight", state.weight)
                         ProfileDataRow("Floors Climbed", state.floorsClimbed)
-                        ProfileDataRow("Move Minutes", state.moveMinutes)
+                        // Remove last divider
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Move Minutes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(state.moveMinutes, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
@@ -499,14 +552,18 @@ fun ProfileScreen(state: DashboardState) {
 
 @Composable
 fun ProfileDataRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
-        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        }
+        HorizontalDivider(modifier = Modifier.fillMaxWidth(), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     }
 }
 
@@ -685,7 +742,7 @@ fun Dashboard(state: DashboardState, navController: NavController) {
     )
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Home") })
+            ModernTopAppBar(title = "Home", showBackButton = false)
         }
     ) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -883,7 +940,8 @@ fun NewHealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
             .aspectRatio(1f)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -898,13 +956,14 @@ fun NewHealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
             ) {
                 Text(
                     metric.type.name.split('_').joinToString(" ") { it.lowercase().replaceFirstChar { char -> char.titlecase() } },
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "details", tint = LightGreen)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "details", tint = metric.color)
             }
 
             Column {
-                Text("Today", style = MaterialTheme.typography.bodyMedium)
+                Text("Today", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = metric.value,
@@ -951,7 +1010,8 @@ fun LastActivityCard(activity: String, time: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurface)

@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
 import com.tharun.vitalmind.ui.MetricType
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
@@ -63,7 +64,29 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Insights") })
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Insights",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     ) { padding ->
         Column(
