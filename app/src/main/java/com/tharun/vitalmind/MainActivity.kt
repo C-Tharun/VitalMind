@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -76,6 +79,7 @@ import com.tharun.vitalmind.ui.StressTerrainMapScreen
 import com.tharun.vitalmind.ui.theme.*
 import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 
 data class HealthMetric(
     val type: MetricType,
@@ -366,9 +370,17 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     var selectedTab by remember { mutableStateOf(0) }
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
+    // Track scroll direction
+    var isScrollingDown by remember { mutableStateOf(false) }
+    var lastScrollOffset by remember { mutableStateOf(0) }
+    LaunchedEffect(listState.firstVisibleItemScrollOffset) {
+        val currentOffset = listState.firstVisibleItemScrollOffset
+        isScrollingDown = currentOffset > lastScrollOffset
+        lastScrollOffset = currentOffset
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
-            0 -> Dashboard(state, navController)
+            0 -> Dashboard(state, navController, listState)
             1 -> InsightsScreen(viewModel = viewModel, navController = navController)
             2 -> VitalMindAIScreen(dashboardState = state)
             3 -> ProfileScreen(state)
@@ -377,18 +389,25 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter
         ) {
-            BottomBlurredNavBar(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+            BottomBlurredNavBar(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it },
+                shrink = isScrollingDown
+            )
         }
     }
 }
 
 @Composable
-fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: Boolean = false) {
+    // Animate height and padding
+    val navBarHeight by animateDpAsState(targetValue = if (shrink) 40.dp else 64.dp, label = "navBarHeight")
+    val navBarPadding by animateDpAsState(targetValue = if (shrink) 8.dp else 32.dp, label = "navBarPadding")
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 32.dp, start = 32.dp, end = 32.dp)
-            .clip(RoundedCornerShape(32.dp))
+            .padding(bottom = navBarPadding, start = navBarPadding, end = navBarPadding)
+            .clip(RoundedCornerShape(if (shrink) 20.dp else 32.dp))
             .background(
                 brush = Brush.horizontalGradient(
                     listOf(
@@ -396,9 +415,9 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         Color(0xFFE0E0E0).copy(alpha = 0.85f)
                     )
                 ),
-                shape = RoundedCornerShape(32.dp)
+                shape = RoundedCornerShape(if (shrink) 20.dp else 32.dp)
             )
-            .height(64.dp)
+            .height(navBarHeight)
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -410,6 +429,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 label = "Home",
                 selected = selectedTab == 0,
                 onClick = { onTabSelected(0) },
+                showLabel = !shrink,
                 modifier = Modifier.weight(1f)
             )
             NavBarItem(
@@ -417,13 +437,15 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 label = "Insights",
                 selected = selectedTab == 1,
                 onClick = { onTabSelected(1) },
+                showLabel = !shrink,
                 modifier = Modifier.weight(1f)
             )
             NavBarItem(
-                icon = Icons.Default.Chat,
+                icon = Icons.AutoMirrored.Filled.Chat,
                 label = "VitalMind AI",
                 selected = selectedTab == 2,
                 onClick = { onTabSelected(2) },
+                showLabel = !shrink,
                 modifier = Modifier.weight(1f)
             )
             NavBarItem(
@@ -431,6 +453,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 label = "Profile",
                 selected = selectedTab == 3,
                 onClick = { onTabSelected(3) },
+                showLabel = !shrink,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -438,7 +461,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 }
 
 @Composable
-fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, showLabel: Boolean = true, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -447,13 +470,15 @@ fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () 
             icon,
             contentDescription = label,
             tint = if (selected) MaterialTheme.colorScheme.primary else Color.Black,
-            modifier = Modifier.size(28.dp)
+            modifier = Modifier.size(if (showLabel) 28.dp else 24.dp)
         )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) MaterialTheme.colorScheme.primary else Color.Black
-        )
+        AnimatedVisibility(visible = showLabel) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) MaterialTheme.colorScheme.primary else Color.Black
+            )
+        }
     }
 }
 
@@ -726,7 +751,7 @@ fun heartPath(width: Float, height: Float, scale: Float): androidx.compose.ui.gr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Dashboard(state: DashboardState, navController: NavController) {
+fun Dashboard(state: DashboardState, navController: NavController, listState: LazyListState) {
     var stepsGoal by remember { mutableStateOf(8000f) }
     var kcalGoal by remember { mutableStateOf(3000f) }
     var distanceGoal by remember { mutableStateOf(5f) }
@@ -745,7 +770,7 @@ fun Dashboard(state: DashboardState, navController: NavController) {
             ModernTopAppBar(title = "Home", showBackButton = false)
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        LazyColumn(state = listState, modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -791,7 +816,7 @@ fun Dashboard(state: DashboardState, navController: NavController) {
             }
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                SectionTitle(title = "Weekly Trends", icon = Icons.Default.ShowChart)
+                SectionTitle(title = "Weekly Trends", icon = Icons.AutoMirrored.Filled.ShowChart)
                 Spacer(modifier = Modifier.height(16.dp))
             }
             item {
