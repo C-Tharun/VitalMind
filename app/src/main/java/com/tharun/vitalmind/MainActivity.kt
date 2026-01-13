@@ -14,6 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -369,18 +371,54 @@ fun AppScreen(
 fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     var selectedTab by remember { mutableStateOf(0) }
     val state by viewModel.state.collectAsState()
-    val listState = rememberLazyListState()
-    // Track scroll direction
+
+    // Create a LazyListState for each tab (only Home and Profile use it, but keep for consistency)
+    val homeListState = rememberLazyListState()
+    val insightsListState = rememberLazyListState() // Not used, but for uniformity
+    val aiListState = rememberLazyListState() // Not used, but for uniformity
+    val profileListState = rememberLazyListState() // Not used, but for uniformity
+
+    // Track scroll direction and threshold for all tabs
     var isScrollingDown by remember { mutableStateOf(false) }
-    var lastScrollOffset by remember { mutableStateOf(0) }
-    LaunchedEffect(listState.firstVisibleItemScrollOffset) {
-        val currentOffset = listState.firstVisibleItemScrollOffset
-        isScrollingDown = currentOffset > lastScrollOffset
-        lastScrollOffset = currentOffset
+    var lastIndex by remember { mutableStateOf(0) }
+    var lastOffset by remember { mutableStateOf(0) }
+    val scrollThreshold = 12 // dp offset threshold to avoid flicker
+
+    // Pick the correct listState for the current tab
+    val currentListState = when (selectedTab) {
+        0 -> homeListState
+        1 -> insightsListState
+        2 -> aiListState
+        3 -> profileListState
+        else -> homeListState
     }
+
+    // Only animate shrink if the current page is scrollable (Home)
+    val shouldAnimate = selectedTab == 0
+
+    // Improved scroll direction detection with threshold
+    LaunchedEffect(selectedTab, currentListState.firstVisibleItemIndex, currentListState.firstVisibleItemScrollOffset) {
+        if (!shouldAnimate) {
+            isScrollingDown = false
+            lastIndex = 0
+            lastOffset = 0
+            return@LaunchedEffect
+        }
+        val index = currentListState.firstVisibleItemIndex
+        val offset = currentListState.firstVisibleItemScrollOffset
+        val delta = (index - lastIndex) * 1000 + (offset - lastOffset)
+        if (delta > scrollThreshold) {
+            isScrollingDown = true
+        } else if (delta < -scrollThreshold) {
+            isScrollingDown = false
+        }
+        lastIndex = index
+        lastOffset = offset
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
-            0 -> Dashboard(state, navController, listState)
+            0 -> Dashboard(state, navController, homeListState)
             1 -> InsightsScreen(viewModel = viewModel, navController = navController)
             2 -> VitalMindAIScreen(dashboardState = state)
             3 -> ProfileScreen(state)
@@ -392,7 +430,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
             BottomBlurredNavBar(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it },
-                shrink = isScrollingDown
+                shrink = shouldAnimate && isScrollingDown
             )
         }
     }
@@ -400,12 +438,31 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
 
 @Composable
 fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: Boolean = false) {
-    // Animate height and padding
-    val navBarHeight by animateDpAsState(targetValue = if (shrink) 40.dp else 64.dp, label = "navBarHeight")
-    val navBarPadding by animateDpAsState(targetValue = if (shrink) 8.dp else 32.dp, label = "navBarPadding")
+    // Animate height, padding, and width with smoother transitions
+    val animationSpec = spring<androidx.compose.ui.unit.Dp>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+    val navBarHeight by animateDpAsState(
+        targetValue = if (shrink) 40.dp else 64.dp,
+        animationSpec = animationSpec,
+        label = "navBarHeight"
+    )
+    val navBarPadding by animateDpAsState(
+        targetValue = if (shrink) 8.dp else 32.dp,
+        animationSpec = animationSpec,
+        label = "navBarPadding"
+    )
+    val navBarWidth by animateDpAsState(
+        targetValue = if (shrink) 220.dp else 0.dp,
+        animationSpec = animationSpec,
+        label = "navBarWidth"
+    ) // 0.dp means fillMaxWidth
     Box(
         modifier = Modifier
-            .fillMaxWidth()
+            .then(
+                if (shrink) Modifier.width(navBarWidth) else Modifier.fillMaxWidth()
+            )
             .padding(bottom = navBarPadding, start = navBarPadding, end = navBarPadding)
             .clip(RoundedCornerShape(if (shrink) 20.dp else 32.dp))
             .background(
@@ -421,16 +478,17 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: 
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = if (shrink) Arrangement.Center else Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val iconPadding = if (shrink) 12.dp else 0.dp
             NavBarItem(
                 icon = Icons.Default.Home,
                 label = "Home",
                 selected = selectedTab == 0,
                 onClick = { onTabSelected(0) },
                 showLabel = !shrink,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = iconPadding)
             )
             NavBarItem(
                 icon = Icons.Default.Insights,
@@ -438,7 +496,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: 
                 selected = selectedTab == 1,
                 onClick = { onTabSelected(1) },
                 showLabel = !shrink,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = iconPadding)
             )
             NavBarItem(
                 icon = Icons.AutoMirrored.Filled.Chat,
@@ -446,7 +504,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: 
                 selected = selectedTab == 2,
                 onClick = { onTabSelected(2) },
                 showLabel = !shrink,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = iconPadding)
             )
             NavBarItem(
                 icon = Icons.Default.Person,
@@ -454,7 +512,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: 
                 selected = selectedTab == 3,
                 onClick = { onTabSelected(3) },
                 showLabel = !shrink,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = iconPadding)
             )
         }
     }
@@ -660,7 +718,8 @@ fun MultiMetricHeartRings(
         modifier = Modifier
             .fillMaxWidth()
             .height(220.dp)
-            .clickable { showGoalDialog = true },
+            .clickable { showGoalDialog = true }
+            .padding(8.dp), // Add padding to the card
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
