@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.lazy.LazyListState
 
 @Serializable
 data class GroqRequest(val model: String, val messages: List<Message>)
@@ -70,12 +71,12 @@ fun generateHealthSummary(
 @Composable
 fun VitalMindAIScreen(
     dashboardState: DashboardState,
+    listState: LazyListState,
     aiViewModel: VitalMindAIViewModel = viewModel()
 ) {
     val userMessage by aiViewModel.userMessage.collectAsState()
     val chatHistory by aiViewModel.chatHistory.collectAsState()
     val coroutineScope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
     var showSuggestions by remember { mutableStateOf(chatHistory.isEmpty()) }
 
     // Generate the health summary from DashboardState

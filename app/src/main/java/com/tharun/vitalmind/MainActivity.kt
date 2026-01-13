@@ -324,7 +324,7 @@ class MainActivity : ComponentActivity() {
                         ActivityHistoryScreen(navController = navController, viewModel = viewModel)
                     }
                     composable("insights") {
-                        InsightsScreen(viewModel = viewModel, navController = navController)
+                        InsightsScreen(viewModel = viewModel, navController = navController, listState = rememberLazyListState())
                     }
                     composable("stress_terrain_map") {
                         val stressTerrainViewModel: StressTerrainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -334,7 +334,7 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("vitalmind_ai") {
                         val state by viewModel.state.collectAsState()
-                        VitalMindAIScreen(dashboardState = state)
+                        VitalMindAIScreen(dashboardState = state, listState = rememberLazyListState())
                     }
                 }
             }
@@ -372,11 +372,11 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     var selectedTab by remember { mutableStateOf(0) }
     val state by viewModel.state.collectAsState()
 
-    // Create a LazyListState for each tab (only Home and Profile use it, but keep for consistency)
+    // Create a LazyListState for each tab (for scroll tracking)
     val homeListState = rememberLazyListState()
-    val insightsListState = rememberLazyListState() // Not used, but for uniformity
-    val aiListState = rememberLazyListState() // Not used, but for uniformity
-    val profileListState = rememberLazyListState() // Not used, but for uniformity
+    val insightsListState = rememberLazyListState()
+    val aiListState = rememberLazyListState() // If AI page is not scrollable, this will remain unused
+    val profileListState = rememberLazyListState()
 
     // Track scroll direction and threshold for all tabs
     var isScrollingDown by remember { mutableStateOf(false) }
@@ -393,17 +393,8 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
         else -> homeListState
     }
 
-    // Only animate shrink if the current page is scrollable (Home)
-    val shouldAnimate = selectedTab == 0
-
-    // Improved scroll direction detection with threshold
+    // Always animate shrink/expand based on scroll direction for all tabs
     LaunchedEffect(selectedTab, currentListState.firstVisibleItemIndex, currentListState.firstVisibleItemScrollOffset) {
-        if (!shouldAnimate) {
-            isScrollingDown = false
-            lastIndex = 0
-            lastOffset = 0
-            return@LaunchedEffect
-        }
         val index = currentListState.firstVisibleItemIndex
         val offset = currentListState.firstVisibleItemScrollOffset
         val delta = (index - lastIndex) * 1000 + (offset - lastOffset)
@@ -419,9 +410,9 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
             0 -> Dashboard(state, navController, homeListState)
-            1 -> InsightsScreen(viewModel = viewModel, navController = navController)
-            2 -> VitalMindAIScreen(dashboardState = state)
-            3 -> ProfileScreen(state)
+            1 -> InsightsScreen(viewModel = viewModel, navController = navController, listState = insightsListState)
+            2 -> VitalMindAIScreen(dashboardState = state, listState = aiListState)
+            3 -> ProfileScreen(state = state)
         }
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -430,7 +421,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
             BottomBlurredNavBar(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it },
-                shrink = shouldAnimate && isScrollingDown
+                shrink = isScrollingDown
             )
         }
     }

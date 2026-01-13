@@ -3,6 +3,8 @@ package com.tharun.vitalmind.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsWalk
@@ -40,7 +42,7 @@ import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = null) {
+fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = null, listState: LazyListState) {
     val baselineInsights by viewModel.baselineInsights.collectAsState()
     val aiExplanations by viewModel.aiExplanations.collectAsState()
     val weather by viewModel.weather.collectAsState()
@@ -107,7 +109,7 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            LazyColumn(
+            LazyColumn(state = listState,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.weight(1f)
             ) {
