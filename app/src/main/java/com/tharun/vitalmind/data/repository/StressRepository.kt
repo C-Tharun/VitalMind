@@ -1,10 +1,15 @@
 package com.tharun.vitalmind.data.repository
 
 import android.util.Log
+import com.tharun.vitalmind.data.AppDatabase
 import com.tharun.vitalmind.data.HealthDataRepository
+import com.tharun.vitalmind.data.StressScoreHistory
+import com.tharun.vitalmind.data.StressScoreHistoryDao
 import com.tharun.vitalmind.data.remote.StressRequest
 import com.tharun.vitalmind.data.remote.StressResponse
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -24,7 +29,8 @@ interface RealStressApiService {
 
 class StressRepository(
     private val healthDataRepository: HealthDataRepository,
-    private val userId: String
+    private val userId: String,
+    private val stressScoreHistoryDao: StressScoreHistoryDao
 ) {
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -70,7 +76,20 @@ class StressRepository(
                 recent_stress_scores = null // You can implement history if needed
             )
             Log.d("StressRepository", "Sending stress request: $request")
-            realApi.calculateStress(request)
+            val response = realApi.calculateStress(request)
+            // Persist to DB if successful
+            val history = StressScoreHistory(
+                userId = userId,
+                timestamp = System.currentTimeMillis(),
+                stress_score = response.stress_score,
+                stress_level = response.stress_level,
+                stress_status = response.stress_status,
+                stress_stability = response.stress_stability,
+                mood = response.mood,
+                request_json = Gson().toJson(request)
+            )
+            stressScoreHistoryDao.insert(history)
+            response
         } catch (e: SocketTimeoutException) {
             Log.e("StressRepository", "Timeout while calculating stress score: ${e.message}", e)
             StressResponse(
@@ -102,4 +121,7 @@ class StressRepository(
             )
         }
     }
+
+    fun getStressScoreHistory(userId: String): Flow<List<StressScoreHistory>> =
+        stressScoreHistoryDao.getHistoryForUser(userId)
 }

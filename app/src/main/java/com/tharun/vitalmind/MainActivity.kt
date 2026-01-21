@@ -87,6 +87,9 @@ import com.tharun.vitalmind.ui.stress.StressUiState
 import com.tharun.vitalmind.ui.stress.StressViewModel
 import com.tharun.vitalmind.data.repository.StressRepository
 import com.tharun.vitalmind.data.remote.StressApiService
+import com.tharun.vitalmind.ui.stress.StressHistoryScreen
+import com.tharun.vitalmind.ui.stress.StressHistoryViewModel
+import com.tharun.vitalmind.data.AppDatabase
 
 data class HealthMetric(
     val type: MetricType,
@@ -340,6 +343,20 @@ class MainActivity : ComponentActivity() {
                     composable("vitalmind_ai") {
                         val state by viewModel.state.collectAsState()
                         VitalMindAIScreen(dashboardState = state, listState = rememberLazyListState())
+                    }
+                    composable("stress_history") {
+                        val context = LocalContext.current
+                        val db = AppDatabase.getDatabase(context)
+                        val state by viewModel.state.collectAsState()
+                        val stressRepo = com.tharun.vitalmind.data.repository.StressRepository(
+                            healthDataRepository = viewModel.repository,
+                            userId = state.userId,
+                            stressScoreHistoryDao = db.stressScoreHistoryDao()
+                        )
+                        val stressHistoryViewModel = remember(state.userId) {
+                            StressHistoryViewModel(stressRepo, state.userId)
+                        }
+                        StressHistoryScreen(viewModel = stressHistoryViewModel)
                     }
                 }
             }
@@ -821,11 +838,14 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
     // --- Stress Score Feature ---
+    val context = LocalContext.current
+    val db = AppDatabase.getDatabase(context)
     val stressViewModel = remember(state.userId) {
         com.tharun.vitalmind.ui.stress.StressViewModel(
             com.tharun.vitalmind.data.repository.StressRepository(
                 healthDataRepository = viewModel.repository,
-                userId = state.userId
+                userId = state.userId,
+                stressScoreHistoryDao = db.stressScoreHistoryDao()
             )
         )
     }
@@ -864,6 +884,20 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     uiState = stressUiState,
                     onCalculate = { stressViewModel.calculateStress() }
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { navController.navigate("stress_history") },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("View Stress Score History", fontWeight = FontWeight.Bold)
+                        Text("See your previous stress scores", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp)) // Increased space to prevent overlap
                 // --- End Stress Score Card ---
             }
             item {
