@@ -82,6 +82,11 @@ import com.tharun.vitalmind.ui.theme.*
 import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
+import com.tharun.vitalmind.ui.stress.StressScoreCard
+import com.tharun.vitalmind.ui.stress.StressUiState
+import com.tharun.vitalmind.ui.stress.StressViewModel
+import com.tharun.vitalmind.data.repository.StressRepository
+import com.tharun.vitalmind.data.remote.StressApiService
 
 data class HealthMetric(
     val type: MetricType,
@@ -815,6 +820,24 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         HealthMetric(MetricType.CALORIES, state.calories, "kcal", Icons.Default.LocalFireDepartment, LightGreen),
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
+    // --- Stress Score Feature ---
+    // Create and remember StressViewModel (scoped to Dashboard)
+    val stressViewModel = remember {
+        StressViewModel(
+            StressRepository(object : StressApiService {
+                override suspend fun calculateStress(request: com.tharun.vitalmind.data.remote.StressRequest) =
+                    com.tharun.vitalmind.data.remote.StressResponse(
+                        stress_level = "Moderate",
+                        stress_score = 0.65f,
+                        stress_status = "Stable",
+                        stress_stability = "Consistent",
+                        mood = "Neutral"
+                    )
+            })
+        )
+    }
+    val stressUiState by stressViewModel.uiState.collectAsState()
+    // ...existing code...
     Scaffold(
         topBar = {
             ModernTopAppBar(title = "Home", showBackButton = false)
@@ -843,6 +866,12 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     }
                 )
                 Spacer(modifier = Modifier.height(24.dp))
+                // --- Stress Score Card ---
+                StressScoreCard(
+                    uiState = stressUiState,
+                    onCalculate = { stressViewModel.calculateStress() }
+                )
+                // --- End Stress Score Card ---
             }
             item {
                 LazyVerticalGrid(
