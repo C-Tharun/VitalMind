@@ -30,7 +30,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val healthDataDao = AppDatabase.getDatabase(application).healthDataDao()
     private val googleFitManager = GoogleFitManager(application)
-    private val repository = HealthDataRepository(healthDataDao, googleFitManager)
+    val repository = HealthDataRepository(healthDataDao, googleFitManager)
 
     private val _userId = MutableStateFlow<String?>(null)
     private val _userName = MutableStateFlow("User")
@@ -93,23 +93,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     userId = userId,
                     userName = _userName.value,
                     heartRate = latestHeartRate?.toString() ?: "--",
-                    calories = if (totalCalories > 0f) String.format("%.0f", totalCalories) else "--",
+                    calories = if (totalCalories > 0f) String.format(java.util.Locale.getDefault(), "%.0f", totalCalories) else "--",
                     steps = if (totalSteps > 0) totalSteps.toString() else "--",
-                    distance = if (totalDistance > 0f) String.format("%.2f", totalDistance) else "--",
+                    distance = if (totalDistance > 0f) String.format(java.util.Locale.getDefault(), "%.2f", totalDistance) else "--",
                     sleepDuration = if (totalSleepMinutes > 0) "${totalSleepMinutes / 60}h ${totalSleepMinutes % 60}m" else "--",
                     lastActivity = lastActivityData?.activityType ?: "None",
-                    lastActivityTime = lastActivityData?.timestamp?.let { SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date(it)) } ?: "",
+                    lastActivityTime = lastActivityData?.timestamp?.let { java.text.SimpleDateFormat("EEE, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "",
                     weeklySteps = weeklySteps,
                     weeklyCalories = weeklyCalories,
                     weeklyDistance = weeklyDistance,
                     weeklyHeartRate = weeklyHeartRate,
                     weeklySleep = weeklySleep,
                     weeklyActivity = weeklyActivity,
-                    weight = latestWeight?.let { String.format("%.1f", it) } ?: "--",
-                    floorsClimbed = if (totalFloorsClimbed > 0f) String.format("%.0f", totalFloorsClimbed) else "--",
+                    weight = latestWeight?.let { String.format(java.util.Locale.getDefault(), "%.1f", it) } ?: "--",
+                    floorsClimbed = if (totalFloorsClimbed > 0f) String.format(java.util.Locale.getDefault(), "%.0f", totalFloorsClimbed) else "--",
                     moveMinutes = if (totalMoveMinutes > 0) totalMoveMinutes.toString() else "--",
-                    bodyTemperature = latestBodyTemp?.let { String.format("%.1f", it) } ?: "--",
-                    bloodOxygenSaturation = latestSpo2?.let { String.format("%.1f", it) } ?: "--"
+                    bodyTemperature = latestBodyTemp?.let { String.format(java.util.Locale.getDefault(), "%.1f", it) } ?: "--",
+                    bloodOxygenSaturation = latestSpo2?.let { String.format(java.util.Locale.getDefault(), "%.1f", it) } ?: "--"
                 )
             }
         } else {
@@ -546,11 +546,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val userId = _userId.value ?: return@launch
             val allData = repository.getHealthData(userId).firstOrNull() ?: return@launch
-            val todayCal = Calendar.getInstance()
-            todayCal.set(Calendar.HOUR_OF_DAY, 0)
-            todayCal.set(Calendar.MINUTE, 0)
-            todayCal.set(Calendar.SECOND, 0)
-            todayCal.set(Calendar.MILLISECOND, 0)
+            val todayCal = java.util.Calendar.getInstance()
+            todayCal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            todayCal.set(java.util.Calendar.MINUTE, 0)
+            todayCal.set(java.util.Calendar.SECOND, 0)
+            todayCal.set(java.util.Calendar.MILLISECOND, 0)
             val todayStart = todayCal.timeInMillis
             val now = System.currentTimeMillis()
             val last7DaysStart = todayStart - 6 * 24 * 60 * 60 * 1000L
@@ -575,11 +575,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // Sleep (in minutes)
             val sleepList = last7DaysData.groupBy { dayKey(it.timestamp) }.mapValues { day ->
-                // Use getTotalSleepForDate for each day for consistency with sleep history
-                val dayCal = Calendar.getInstance()
+                val dayCal = java.util.Calendar.getInstance()
                 val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
                 val date = dateFormat.parse(day.key)
-                dayCal.time = date
+                dayCal.time = date ?: java.util.Date()
                 getTotalSleepForDate(day.value, dayCal.timeInMillis).toFloat()
             }
             // Exclude days with 0 sleep from baseline calculation
@@ -725,18 +724,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 append("Keep your answer concise (1-2 sentences), informative, and to the point. Avoid unnecessary details.\n")
                 append("Context: ")
                 append("Steps today are ")
-                append(
-                    when (ctx.stepsDeviation) {
-                        "below" -> "below normal. "
-                        "above" -> "above normal. "
-                        "normal" -> "normal. "
-                        else -> "unknown. "
-                    }
-                )
-                append("User has walked ${"%.1f".format(ctx.distanceKm)} km today. ")
+                when (ctx.stepsDeviation) {
+                    "below" -> append("below normal. ")
+                    "above" -> append("above normal. ")
+                    "normal" -> append("normal. ")
+                    else -> append("unknown. ")
+                }
+                append("User has walked %.1f km today. ".format(ctx.distanceKm))
                 append("It is ${ctx.timeOfDay}. ")
                 append("Weather is ${ctx.weatherCondition ?: "unknown"}, ")
-                append("${ctx.temperatureC?.let { "${it}°C, " } ?: ""}")
+                append(ctx.temperatureC?.let { "${it}°C, " } ?: "")
                 append("AQI is ${ctx.aqi ?: "unknown"}.")
             }
             try {

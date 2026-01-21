@@ -414,7 +414,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
-            0 -> Dashboard(state, navController, homeListState)
+            0 -> Dashboard(state, navController, homeListState, viewModel)
             1 -> InsightsScreen(viewModel = viewModel, navController = navController, listState = insightsListState)
             2 -> VitalMindAIScreen(dashboardState = state, listState = aiListState)
             3 -> ProfileScreen(state = state)
@@ -806,7 +806,7 @@ fun heartPath(width: Float, height: Float, scale: Float): androidx.compose.ui.gr
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Dashboard(state: DashboardState, navController: NavController, listState: LazyListState) {
+fun Dashboard(state: DashboardState, navController: NavController, listState: LazyListState, viewModel: MainViewModel) {
     var stepsGoal by remember { mutableStateOf(8000f) }
     var kcalGoal by remember { mutableStateOf(3000f) }
     var distanceGoal by remember { mutableStateOf(5f) }
@@ -821,19 +821,12 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
     // --- Stress Score Feature ---
-    // Create and remember StressViewModel (scoped to Dashboard)
-    val stressViewModel = remember {
-        StressViewModel(
-            StressRepository(object : StressApiService {
-                override suspend fun calculateStress(request: com.tharun.vitalmind.data.remote.StressRequest) =
-                    com.tharun.vitalmind.data.remote.StressResponse(
-                        stress_level = "Moderate",
-                        stress_score = 0.65f,
-                        stress_status = "Stable",
-                        stress_stability = "Consistent",
-                        mood = "Neutral"
-                    )
-            })
+    val stressViewModel = remember(state.userId) {
+        com.tharun.vitalmind.ui.stress.StressViewModel(
+            com.tharun.vitalmind.data.repository.StressRepository(
+                healthDataRepository = viewModel.repository,
+                userId = state.userId
+            )
         )
     }
     val stressUiState by stressViewModel.uiState.collectAsState()
