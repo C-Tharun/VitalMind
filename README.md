@@ -158,6 +158,6 @@ This project was developed as a final-year engineering project, demonstrating:
 
 ## 👨‍💻 Author
 
-[Your Name]  
+Tharun Subramanian C, Tavish P
 Final-Year Engineering Student  
 Project: VitalMind
