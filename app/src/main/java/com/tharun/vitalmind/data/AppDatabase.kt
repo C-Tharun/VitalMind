@@ -7,14 +7,15 @@ import androidx.room.RoomDatabase
 import com.tharun.vitalmind.data.StressScoreHistory
 
 @Database(
-    entities = [HealthData::class, StressScoreHistory::class],
-    version = 2,
+    entities = [HealthData::class, StressScoreHistory::class, HealthDeviationBaseline::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun healthDataDao(): HealthDataDao
     abstract fun stressScoreHistoryDao(): StressScoreHistoryDao
+    abstract fun healthDeviationBaselineDao(): HealthDeviationBaselineDao
 
     companion object {
         @Volatile

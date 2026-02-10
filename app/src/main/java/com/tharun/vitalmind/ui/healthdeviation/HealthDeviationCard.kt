@@ -15,17 +15,17 @@ import com.tharun.vitalmind.data.remote.HealthDeviationResponse
 import java.util.Locale
 
 /**
- * Health Deviation Card - displays PHBD-Net analysis results
+ * Health Deviation Card - displays PHBD-Net analysis results with baseline support
  */
 @Composable
 fun HealthDeviationCard(
-    uiState: HealthDeviationUiState,
+    uiState: HealthDeviationUiStateExtended,
     onAnalyze: () -> Unit
 ) {
     // Log current state for debugging
     LaunchedEffect(uiState) {
         Log.d("HealthDeviationCard", "📱 Current UI State: ${uiState.javaClass.simpleName}")
-        if (uiState is HealthDeviationUiState.Error) {
+        if (uiState is HealthDeviationUiStateExtended.Error) {
             Log.e("HealthDeviationCard", "Error state message: ${uiState.message}")
         }
     }
@@ -53,7 +53,22 @@ fun HealthDeviationCard(
             )
 
             when (uiState) {
-                is HealthDeviationUiState.Idle -> {
+                is HealthDeviationUiStateExtended.Idle -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(8.dp)
+                    )
+                }
+
+                is HealthDeviationUiStateExtended.CollectingBaseline -> {
+                    BaselineCollectionView(
+                        daysCollected = uiState.daysCollected,
+                        daysNeeded = uiState.daysNeeded
+                    )
+                }
+
+                is HealthDeviationUiStateExtended.Ready -> {
                     Button(
                         onClick = {
                             Log.d("HealthDeviationCard", "🔵 Analyze Deviation button clicked")
@@ -64,17 +79,20 @@ fun HealthDeviationCard(
                         Text("Analyze Deviation")
                     }
                 }
-                is HealthDeviationUiState.Loading -> {
+
+                is HealthDeviationUiStateExtended.Loading -> {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)
                             .padding(8.dp)
                     )
                 }
-                is HealthDeviationUiState.Success -> {
+
+                is HealthDeviationUiStateExtended.Success -> {
                     HealthDeviationResult(response = uiState.response)
                 }
-                is HealthDeviationUiState.Error -> {
+
+                is HealthDeviationUiStateExtended.Error -> {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "⚠️ ${uiState.message}",
@@ -101,6 +119,74 @@ fun HealthDeviationCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shows baseline collection progress
+ */
+@Composable
+private fun BaselineCollectionView(daysCollected: Int, daysNeeded: Int) {
+    val progress = daysCollected.toFloat() / daysNeeded.toFloat()
+    val daysRemaining = daysNeeded - daysCollected
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "🔄 Personalizing your health baseline",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp
+            )
+        }
+
+        // Progress bar
+        LinearProgressIndicator(
+            progress = progress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+
+        Text(
+            text = "Collecting data for a personalized experience",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "$daysCollected / $daysNeeded days collected",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Available in $daysRemaining ${if (daysRemaining == 1) "day" else "days"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+
+        // Info message
+        Text(
+            text = "💡 Keep syncing your health data daily to build your personalized baseline",
+            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }
 
