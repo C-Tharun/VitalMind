@@ -28,9 +28,10 @@ data class HealthDeviationBaseline(
     val sedentary_ratio: Float,
     val movement_variance: Float,
     val activity_load_index: Float,
-    val sleep_consistency: Float,
+    val sleep_consistency: Float,  // Stores sleep variance (lower = more consistent sleep pattern)
 
     // Metadata
     val createdAt: Long = System.currentTimeMillis()
 )
+
 

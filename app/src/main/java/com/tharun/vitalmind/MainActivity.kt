@@ -855,6 +855,7 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         HealthDeviationViewModel(
             HealthDeviationRepository(
                 healthDataRepository = viewModel.repository,
+                baselineDao = db.healthDeviationBaselineDao(),
                 userId = state.userId
             )
         )

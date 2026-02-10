@@ -3,8 +3,11 @@ package com.tharun.vitalmind.data.repository
 import android.util.Log
 import com.tharun.vitalmind.data.HealthData
 import com.tharun.vitalmind.data.HealthDataRepository
+import com.tharun.vitalmind.data.HealthDeviationBaseline
+import com.tharun.vitalmind.data.HealthDeviationBaselineDao
 import com.tharun.vitalmind.data.remote.HealthDeviationRequest
 import com.tharun.vitalmind.data.remote.HealthDeviationResponse
+import com.tharun.vitalmind.ui.healthdeviation.BaselineStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -27,12 +30,17 @@ interface HealthDeviationApiService {
 }
 
 /**
- * Repository for Health Deviation (PHBD-Net) feature
+ * Repository for Health Deviation (PHBD-Net) feature with personalized baseline support
  */
 class HealthDeviationRepository(
     private val healthDataRepository: HealthDataRepository,
+    private val baselineDao: HealthDeviationBaselineDao,
     private val userId: String
 ) {
+    companion object {
+        const val MINIMUM_BASELINE_DAYS = 10
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)  // Increased for cold starts
         .readTimeout(60, TimeUnit.SECONDS)     // Increased for cold starts
@@ -50,6 +58,128 @@ class HealthDeviationRepository(
     private val api by lazy { retrofit.create(HealthDeviationApiService::class.java) }
 
     /**
+     * Check baseline status for the current user
+     */
+    suspend fun getBaselineStatus(): Pair<BaselineStatus, Int> = withContext(Dispatchers.IO) {
+        val daysCount = baselineDao.getBaselineDaysCount(userId)
+        val status = if (daysCount >= MINIMUM_BASELINE_DAYS) BaselineStatus.READY else BaselineStatus.COLLECTING
+        Pair(status, daysCount)
+    }
+
+    /**
+     * Collect and store today's baseline data
+     *
+     * Safety: Only collects baseline if sufficient data exists for TODAY.
+     * This prevents premature baseline creation before Google Fit sync completes.
+     *
+     * Called automatically on ViewModel init, but gracefully skips if data is insufficient.
+     */
+    suspend fun collectTodaysBaseline(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val today = dayKey(System.currentTimeMillis())
+
+            // Check if we already have baseline for today
+            val hasToday = baselineDao.hasBaselineForDate(userId, today) > 0
+            if (hasToday) {
+                Log.d("HealthDeviationRepo", "✅ Baseline already exists for today: $today")
+                return@withContext Result.success(Unit)
+            }
+
+            // Get all health data for the user
+            val healthDataList = healthDataRepository.getHealthData(userId).first()
+            if (healthDataList.isEmpty()) {
+                Log.w("HealthDeviationRepo", "⚠️ No health data available to create baseline - skipping")
+                return@withContext Result.failure(Exception("No health data available"))
+            }
+
+            // Get TODAY's data
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val todayStart = cal.timeInMillis
+            val todayEnd = todayStart + 24 * 60 * 60 * 1000
+
+            val todayData = healthDataList.filter { it.timestamp >= todayStart && it.timestamp < todayEnd }
+
+            if (todayData.isEmpty()) {
+                Log.w("HealthDeviationRepo", "⚠️ No health data for today yet - skipping baseline collection (will retry on next sync)")
+                return@withContext Result.failure(Exception("No health data for today"))
+            }
+
+            /**
+             * Data Sufficiency Check:
+             * Ensure we have enough quality data before creating baseline.
+             * This prevents baseline creation immediately after app launch,
+             * before Google Fit sync has completed.
+             *
+             * Minimum requirements:
+             * - At least 3 heart rate samples OR
+             * - Steps or calories data present
+             */
+            val heartRateSamples = todayData.mapNotNull { it.heartRate }
+            val hasSteps = todayData.any { it.steps != null && it.steps > 0 }
+            val hasCalories = todayData.any { it.calories != null && it.calories > 0f }
+            val hasSufficientHR = heartRateSamples.size >= 3
+
+            val hasSufficientData = hasSufficientHR || hasSteps || hasCalories
+
+            if (!hasSufficientData) {
+                Log.w("HealthDeviationRepo", "⚠️ Insufficient data for baseline (HR samples: ${heartRateSamples.size}, hasSteps: $hasSteps, hasCal: $hasCalories)")
+                Log.w("HealthDeviationRepo", "   Waiting for more sync data - will retry on next app open")
+                return@withContext Result.failure(Exception("Insufficient data for today"))
+            }
+
+            // Get recent 7 days for computing trends
+            val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
+            val recentData = healthDataList.filter { it.timestamp >= sevenDaysAgo }
+
+            // Compute all metrics for today
+            val todaySteps = todayData.sumOf { it.steps ?: 0 }
+            val todayCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+            val todayHeartRates = todayData.mapNotNull { it.heartRate }
+            val todayMoveMinutes = todayData.sumOf { it.moveMinutes ?: 0 }
+
+            val avgHeartRate = computeAvgHeartRate(todayHeartRates, recentData)
+            val restingHeartRate = computeRestingHeartRate(recentData, avgHeartRate)
+            val hrVariance = computeHeartRateVariance(recentData)
+            val totalSleepMinutes = computeTodaySleepMinutes(todayData, todayStart)
+            val caloriesBurned = if (todayCalories > 0f) todayCalories else computeEstimatedCalories(todaySteps)
+            val sedentaryRatio = computeSedentaryRatio(todayMoveMinutes, todaySteps)
+            val movementVariance = computeMovementVariance(recentData)
+            val activityLoadIndex = computeActivityLoadIndex(todaySteps, caloriesBurned)
+            val sleepVariance = computeSleepVariance(recentData)
+
+            // Create baseline record
+            val baseline = HealthDeviationBaseline(
+                userId = userId,
+                date = today,
+                timestamp = todayStart,
+                avg_heart_rate = avgHeartRate,
+                resting_heart_rate = restingHeartRate,
+                hr_variance = hrVariance,
+                steps_total = todaySteps,
+                total_sleep_minutes = totalSleepMinutes,
+                calories_burned = caloriesBurned,
+                sedentary_ratio = sedentaryRatio,
+                movement_variance = movementVariance,
+                activity_load_index = activityLoadIndex,
+                sleep_consistency = sleepVariance
+            )
+
+            baselineDao.insertBaseline(baseline)
+            Log.d("HealthDeviationRepo", "✅ Baseline saved for $today")
+            Log.d("HealthDeviationRepo", "   Steps: $todaySteps, Sleep: ${totalSleepMinutes}min, HR samples: ${todayHeartRates.size}")
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("HealthDeviationRepo", "❌ Error collecting baseline: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Analyzes health deviation based on current health data
      * Returns Result.success or Result.failure
      */
@@ -58,7 +188,7 @@ class HealthDeviationRepository(
             Log.d("HealthDeviationRepo", "=== Starting Health Deviation Analysis ===")
             Log.d("HealthDeviationRepo", "User ID: $userId")
 
-            // Get all health data for the user to compute derived metrics
+            // Get all health data for the user
             val healthDataList = healthDataRepository.getHealthData(userId).first()
             Log.d("HealthDeviationRepo", "Retrieved ${healthDataList.size} health data records")
 
@@ -67,26 +197,45 @@ class HealthDeviationRepository(
                 return@withContext Result.failure(Exception("No health data available. Please sync with Google Fit first."))
             }
 
-            // Get the latest record
-            val latest = healthDataList.maxByOrNull { it.timestamp }!!
-            Log.d("HealthDeviationRepo", "Latest health data timestamp: ${latest.timestamp}")
+            // Get TODAY's data (matching MainViewModel logic)
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val todayStart = cal.timeInMillis
+            val todayEnd = todayStart + 24 * 60 * 60 * 1000
 
-            // Get recent records for computing derived metrics (last 7 days)
+            val todayData = healthDataList.filter { it.timestamp >= todayStart && it.timestamp < todayEnd }
+            Log.d("HealthDeviationRepo", "Today's data records: ${todayData.size}")
+
+            // Get recent 7 days for computing trends
             val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
             val recentData = healthDataList.filter { it.timestamp >= sevenDaysAgo }
             Log.d("HealthDeviationRepo", "Recent data (7 days): ${recentData.size} records")
 
-            // Compute derived metrics with fallbacks
-            val avgHeartRate = computeAvgHeartRate(recentData, latest)
+            // Aggregate TODAY's data (like Dashboard does)
+            val todaySteps = todayData.sumOf { it.steps ?: 0 }
+            val todayCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+            val todayHeartRates = todayData.mapNotNull { it.heartRate }
+            val todayMoveMinutes = todayData.sumOf { it.moveMinutes ?: 0 }
+
+            Log.d("HealthDeviationRepo", "TODAY's aggregated data:")
+            Log.d("HealthDeviationRepo", "  Today steps: $todaySteps")
+            Log.d("HealthDeviationRepo", "  Today calories: $todayCalories")
+            Log.d("HealthDeviationRepo", "  Today move minutes: $todayMoveMinutes")
+
+            // Compute derived metrics using both today's and recent data
+            val avgHeartRate = computeAvgHeartRate(todayHeartRates, recentData)
             val restingHeartRate = computeRestingHeartRate(recentData, avgHeartRate)
             val hrVariance = computeHeartRateVariance(recentData)
-            val stepsTotal = latest.steps ?: 0
-            val totalSleepMinutes = computeAvgSleepMinutes(recentData, latest)
-            val caloriesBurned = latest.calories ?: computeEstimatedCalories(stepsTotal)
-            val sedentaryRatio = computeSedentaryRatio(recentData, latest)
+            val stepsTotal = todaySteps
+            val totalSleepMinutes = computeTodaySleepMinutes(todayData, todayStart)
+            val caloriesBurned = if (todayCalories > 0f) todayCalories else computeEstimatedCalories(stepsTotal)
+            val sedentaryRatio = computeSedentaryRatio(todayMoveMinutes, stepsTotal)
             val movementVariance = computeMovementVariance(recentData)
             val activityLoadIndex = computeActivityLoadIndex(stepsTotal, caloriesBurned)
-            val sleepConsistency = computeSleepConsistency(recentData)
+            val sleepVariance = computeSleepVariance(recentData)
 
             Log.d("HealthDeviationRepo", "Computed metrics:")
             Log.d("HealthDeviationRepo", "  avg_heart_rate: $avgHeartRate")
@@ -98,7 +247,7 @@ class HealthDeviationRepository(
             Log.d("HealthDeviationRepo", "  sedentary_ratio: $sedentaryRatio")
             Log.d("HealthDeviationRepo", "  movement_variance: $movementVariance")
             Log.d("HealthDeviationRepo", "  activity_load_index: $activityLoadIndex")
-            Log.d("HealthDeviationRepo", "  sleep_consistency: $sleepConsistency")
+            Log.d("HealthDeviationRepo", "  sleep_variance: $sleepVariance")
 
             val now = java.util.Calendar.getInstance()
 
@@ -114,7 +263,7 @@ class HealthDeviationRepository(
                 sedentary_ratio = sedentaryRatio,
                 movement_variance = movementVariance,
                 activity_load_index = activityLoadIndex,
-                sleep_consistency = sleepConsistency,
+                sleep_consistency = sleepVariance,  // Using variance (lower = more consistent)
                 hour_of_day = now.get(java.util.Calendar.HOUR_OF_DAY),
                 is_sedentary = if (stepsTotal < 1000) 1 else 0
             )
@@ -149,23 +298,75 @@ class HealthDeviationRepository(
      * Helper functions to compute derived metrics from health data
      */
 
-    private fun computeAvgHeartRate(recentData: List<HealthData>, latest: HealthData): Float {
-        val heartRates = recentData.mapNotNull { it.heartRate }
-        return if (heartRates.isNotEmpty()) {
-            heartRates.average().toFloat()
+    private fun dayKey(timestamp: Long): String {
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        return dateFormat.format(java.util.Date(timestamp))
+    }
+
+    private fun computeAvgHeartRate(todayHeartRates: List<Float>, recentData: List<HealthData>): Float {
+        // Prefer today's average if available
+        return if (todayHeartRates.isNotEmpty()) {
+            todayHeartRates.average().toFloat()
         } else {
-            latest.heartRate ?: 70f  // Default fallback
+            // Fallback to recent 7-day average
+            val recentHeartRates = recentData.mapNotNull { it.heartRate }
+            if (recentHeartRates.isNotEmpty()) {
+                recentHeartRates.average().toFloat()
+            } else {
+                70f  // Default fallback
+            }
         }
     }
 
     private fun computeRestingHeartRate(recentData: List<HealthData>, avgHeartRate: Float): Float {
-        // Resting heart rate is typically lower than average
-        // Estimate as 85% of average heart rate
-        val heartRates = recentData.mapNotNull { it.heartRate }
-        return if (heartRates.isNotEmpty()) {
-            heartRates.minOrNull() ?: (avgHeartRate * 0.85f)
+        /**
+         * Resting heart rate represents the lowest stable HR during rest periods.
+         *
+         * Physiological reasoning:
+         * - True resting HR occurs during sleep or prolonged inactivity
+         * - Google Fit doesn't explicitly provide "resting HR", so we derive it
+         * - We filter HR samples where user is likely at rest (sleep or no movement)
+         * - Taking the lowest 10-15% percentile averages out measurement noise
+         *
+         * Strategy:
+         * 1. Collect HR samples during sleep periods (sleepDuration > 0)
+         * 2. OR collect HR samples where steps == 0 (sedentary periods)
+         * 3. Sort and take lowest 15th percentile
+         * 4. Average that subset for stable resting HR estimate
+         */
+
+        // Collect HR during rest periods (sleep or zero steps)
+        val restingHeartRates = recentData.mapNotNull { data ->
+            // Include HR if during sleep OR during sedentary period
+            val isDuringSleep = data.sleepDuration != null && data.sleepDuration > 0
+            val isLowActivity = data.steps == null || data.steps == 0
+
+            if ((isDuringSleep || isLowActivity) && data.heartRate != null) {
+                data.heartRate
+            } else {
+                null
+            }
+        }
+
+        return if (restingHeartRates.isNotEmpty()) {
+            // Sort HR values to find lowest stable readings
+            val sorted = restingHeartRates.sorted()
+
+            // Take lowest 15% percentile to filter out measurement noise
+            val percentileCount = maxOf(1, (sorted.size * 0.15).toInt())
+            val lowestPercentile = sorted.take(percentileCount)
+
+            // Average the lowest stable readings
+            val restingHR = lowestPercentile.average().toFloat()
+
+            Log.d("HealthDeviationRepo", "Computed resting HR from ${restingHeartRates.size} rest samples, lowest 15% avg: $restingHR")
+            restingHR
         } else {
-            avgHeartRate * 0.85f  // Estimate
+            // Fallback: Resting HR is typically 10-15 bpm lower than average
+            // Use 85% of average HR as physiologically reasonable estimate
+            val estimate = avgHeartRate * 0.85f
+            Log.d("HealthDeviationRepo", "No rest HR samples, estimating resting HR as 85% of avg: $estimate")
+            estimate
         }
     }
 
@@ -178,13 +379,27 @@ class HealthDeviationRepository(
         return sqrt(variance).toFloat()
     }
 
-    private fun computeAvgSleepMinutes(recentData: List<HealthData>, latest: HealthData): Int {
-        val sleepData = recentData.mapNotNull { it.sleepDuration }
-        return if (sleepData.isNotEmpty()) {
-            sleepData.average().toInt()
-        } else {
-            latest.sleepDuration?.toInt() ?: 420  // Default 7 hours
+    private fun computeTodaySleepMinutes(todayData: List<HealthData>, todayStart: Long): Int {
+        // Calculate sleep overlapping with today (matching MainViewModel logic)
+        val todayEnd = todayStart + 24 * 60 * 60 * 1000
+        val sleepRecords = todayData.filter { it.sleepDuration != null && it.sleepDuration > 0 }
+
+        var totalSleepMinutes = 0L
+        for (record in sleepRecords) {
+            val sleepStart = record.timestamp
+            val sleepEnd = sleepStart + (record.sleepDuration!! * 60 * 1000)
+
+            // Calculate overlap with today
+            val overlapStart = maxOf(sleepStart, todayStart)
+            val overlapEnd = minOf(sleepEnd, todayEnd)
+
+            if (overlapEnd > overlapStart) {
+                val overlapMinutes = (overlapEnd - overlapStart) / (60 * 1000)
+                totalSleepMinutes += overlapMinutes
+            }
         }
+
+        return if (totalSleepMinutes > 0) totalSleepMinutes.toInt() else 420  // Default 7 hours
     }
 
     private fun computeEstimatedCalories(steps: Int): Float {
@@ -192,25 +407,28 @@ class HealthDeviationRepository(
         return steps * 0.04f
     }
 
-    private fun computeSedentaryRatio(recentData: List<HealthData>, latest: HealthData): Float {
+    private fun computeSedentaryRatio(moveMinutes: Int, steps: Int): Float {
         // Sedentary ratio = proportion of time with low activity
-        val activeMinutes = recentData.mapNotNull { it.moveMinutes }.average()
         val totalMinutes = 24 * 60f  // Total minutes in a day
 
-        return if (activeMinutes > 0) {
-            1f - (activeMinutes.toFloat() / totalMinutes)
+        return if (moveMinutes > 0) {
+            1f - (moveMinutes.toFloat() / totalMinutes)
         } else {
-            val steps = latest.steps ?: 0
+            // Fallback based on steps
             if (steps < 1000) 0.9f else if (steps < 5000) 0.7f else 0.5f
         }
     }
 
     private fun computeMovementVariance(recentData: List<HealthData>): Float {
-        val steps = recentData.mapNotNull { it.steps?.toFloat() }
-        if (steps.size < 2) return 1000f  // Default variance
+        // Group by day and sum steps per day
+        val dailySteps = recentData.groupBy { dayKey(it.timestamp) }
+            .mapValues { it.value.sumOf { d -> d.steps ?: 0 }.toFloat() }
+            .values.toList()
 
-        val mean = steps.average()
-        val variance = steps.map { (it - mean) * (it - mean) }.average()
+        if (dailySteps.size < 2) return 1000f  // Default variance
+
+        val mean = dailySteps.average()
+        val variance = dailySteps.map { (it - mean) * (it - mean) }.average()
         return sqrt(variance).toFloat()
     }
 
@@ -221,18 +439,43 @@ class HealthDeviationRepository(
         return (stepScore + calorieScore) / 2f
     }
 
-    private fun computeSleepConsistency(recentData: List<HealthData>): Float {
-        val sleepData = recentData.mapNotNull { it.sleepDuration?.toFloat() }
-        if (sleepData.size < 2) return 0.5f  // Moderate consistency as default
+    private fun computeSleepVariance(recentData: List<HealthData>): Float {
+        /**
+         * Sleep Variance: Measures inconsistency in sleep patterns
+         *
+         * Lower value = More consistent sleep schedule (better)
+         * Higher value = Irregular sleep pattern (worse)
+         *
+         * Computed as normalized standard deviation of daily sleep duration
+         * over the recent 7-day period.
+         *
+         * This metric helps identify sleep schedule disruptions which can
+         * contribute to health deviation and stress.
+         */
 
-        val mean = sleepData.average().toFloat()
-        val variance = sleepData.map { (it - mean) * (it - mean) }.average().toFloat()
+        // Group by day and calculate total sleep per day
+        val dailySleep = recentData.groupBy { dayKey(it.timestamp) }
+            .mapValues {
+                it.value.filter { d -> d.sleepDuration != null && d.sleepDuration > 0 }
+                    .sumOf { d -> d.sleepDuration ?: 0L }.toFloat()
+            }
+            .values.filter { it > 0f }.toList()
+
+        if (dailySleep.size < 2) {
+            // Not enough data - return moderate variance
+            return 0.5f
+        }
+
+        val mean = dailySleep.average().toFloat()
+        val variance = dailySleep.map { (it - mean) * (it - mean) }.average().toFloat()
         val stdDev = sqrt(variance)
 
-        // Lower variance = higher consistency
-        // Normalize: high consistency = close to 1.0
-        val ratio = (stdDev / mean).coerceIn(0f, 1f)
-        return (1f - ratio).coerceIn(0f, 1f)
+        // Normalize by mean to get coefficient of variation
+        // This makes variance comparable across different average sleep durations
+        val normalizedVariance = (stdDev / mean).coerceIn(0f, 1f)
+
+        Log.d("HealthDeviationRepo", "Sleep variance computed: $normalizedVariance (${dailySleep.size} days)")
+        return normalizedVariance
     }
 }
 
