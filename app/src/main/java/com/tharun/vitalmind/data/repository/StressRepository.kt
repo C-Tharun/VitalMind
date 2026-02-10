@@ -1,7 +1,6 @@
 package com.tharun.vitalmind.data.repository
 
 import android.util.Log
-import com.tharun.vitalmind.data.AppDatabase
 import com.tharun.vitalmind.data.HealthDataRepository
 import com.tharun.vitalmind.data.StressScoreHistory
 import com.tharun.vitalmind.data.StressScoreHistoryDao
@@ -49,10 +48,14 @@ class StressRepository(
 
     suspend fun calculateStressScore(): StressResponse = withContext(Dispatchers.IO) {
         try {
-            // Get the latest HealthData for the user
+            Log.d("StressRepository", "=== Starting Stress Analysis ===")
+            Log.d("StressRepository", "User ID: $userId")
+
+            // Get all health data for the user
             val healthDataList = healthDataRepository.getHealthData(userId).first()
-            val latest = healthDataList.maxByOrNull { it.timestamp }
-            if (latest == null) {
+            Log.d("StressRepository", "Retrieved ${healthDataList.size} health data records")
+
+            if (healthDataList.isEmpty()) {
                 Log.e("StressRepository", "No synced health data available for user $userId")
                 return@withContext StressResponse(
                     stress_level = "Error",
@@ -62,21 +65,95 @@ class StressRepository(
                     mood = "Unknown"
                 )
             }
+
+            // Get TODAY's data (matching MainViewModel and HealthDeviationRepository logic)
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val todayStart = cal.timeInMillis
+            val todayEnd = todayStart + 24 * 60 * 60 * 1000
+
+            val todayData = healthDataList.filter { it.timestamp >= todayStart && it.timestamp < todayEnd }
+            Log.d("StressRepository", "Today's data records: ${todayData.size}")
+
+            // Aggregate TODAY's data (like Dashboard does)
+            val todaySteps = todayData.sumOf { it.steps ?: 0 }
+            val todayCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+            val todayDistance = todayData.sumOf { it.distance?.toDouble() ?: 0.0 }.toFloat()
+            val todayHeartRates = todayData.mapNotNull { it.heartRate }
+
+            // Calculate sleep overlapping with today
+            var totalSleepMinutes = 0L
+            val sleepRecords = todayData.filter { it.sleepDuration != null && it.sleepDuration > 0 }
+            for (record in sleepRecords) {
+                val sleepStart = record.timestamp
+                val sleepEnd = sleepStart + (record.sleepDuration!! * 60 * 1000)
+                val overlapStart = maxOf(sleepStart, todayStart)
+                val overlapEnd = minOf(sleepEnd, todayEnd)
+                if (overlapEnd > overlapStart) {
+                    totalSleepMinutes += (overlapEnd - overlapStart) / (60 * 1000)
+                }
+            }
+
+            // Get most recent activity
+            val latestActivity = todayData.filter { it.activityType != null }
+                .maxByOrNull { it.timestamp }?.activityType
+
+            // Compute average and max heart rate from TODAY's data
+            val avgHeartRate = if (todayHeartRates.isNotEmpty()) {
+                todayHeartRates.average().toFloat()
+            } else {
+                // Fallback to recent 7-day data
+                val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
+                val recentData = healthDataList.filter { it.timestamp >= sevenDaysAgo }
+                val recentHR = recentData.mapNotNull { it.heartRate }
+                if (recentHR.isNotEmpty()) recentHR.average().toFloat() else 70f
+            }
+
+            val maxHeartRate = if (todayHeartRates.isNotEmpty()) {
+                todayHeartRates.maxOrNull() ?: avgHeartRate
+            } else {
+                avgHeartRate
+            }
+
+            // Map activity to valid backend types
+            // Backend typically accepts: still, walking, running, biking, in_vehicle, etc.
+            // If no activity or "unknown", default to "still" (represents low/no activity)
+            val validActivity = when {
+                latestActivity.isNullOrBlank() -> "still"
+                latestActivity.equals("unknown", ignoreCase = true) -> "still"
+                else -> latestActivity.lowercase()
+            }
+
+            Log.d("StressRepository", "TODAY's aggregated data:")
+            Log.d("StressRepository", "  Steps: $todaySteps")
+            Log.d("StressRepository", "  Calories: $todayCalories")
+            Log.d("StressRepository", "  Distance: $todayDistance")
+            Log.d("StressRepository", "  Sleep: $totalSleepMinutes min")
+            Log.d("StressRepository", "  Avg HR: $avgHeartRate")
+            Log.d("StressRepository", "  Max HR: $maxHeartRate")
+            Log.d("StressRepository", "  Activity: $validActivity (original: $latestActivity)")
+
             val now = java.util.Calendar.getInstance()
             val request = StressRequest(
-                avg_heart_rate = latest.heartRate ?: 0f,
-                max_heart_rate = latest.heartRate ?: 0f, // If you have max, use it
-                steps_total = latest.steps ?: 0,
-                calories_total = latest.calories ?: 0f,
-                distance_total = latest.distance ?: 0f,
-                sleep_minutes = (latest.sleepDuration ?: 0L).toInt(),
-                activity = latest.activityType ?: "unknown",
+                avg_heart_rate = avgHeartRate,
+                max_heart_rate = maxHeartRate,
+                steps_total = todaySteps,
+                calories_total = todayCalories,
+                distance_total = todayDistance,
+                sleep_minutes = totalSleepMinutes.toInt(),
+                activity = validActivity,
                 hour_of_day = now.get(java.util.Calendar.HOUR_OF_DAY),
-                is_sedentary = if ((latest.steps ?: 0) < 1000) 1 else 0,
+                is_sedentary = if (todaySteps < 1000) 1 else 0,
                 recent_stress_scores = null // You can implement history if needed
             )
-            Log.d("StressRepository", "Sending stress request: $request")
+
+            Log.d("StressRepository", "📤 Sending stress request: $request")
             val response = realApi.calculateStress(request)
+            Log.d("StressRepository", "📥 Received response: $response")
+
             // Persist to DB if successful
             val history = StressScoreHistory(
                 userId = userId,
