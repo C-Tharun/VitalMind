@@ -83,13 +83,12 @@ import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
 import com.tharun.vitalmind.ui.stress.StressScoreCard
-import com.tharun.vitalmind.ui.stress.StressUiState
-import com.tharun.vitalmind.ui.stress.StressViewModel
-import com.tharun.vitalmind.data.repository.StressRepository
-import com.tharun.vitalmind.data.remote.StressApiService
 import com.tharun.vitalmind.ui.stress.StressHistoryScreen
 import com.tharun.vitalmind.ui.stress.StressHistoryViewModel
 import com.tharun.vitalmind.data.AppDatabase
+import com.tharun.vitalmind.ui.healthdeviation.HealthDeviationCard
+import com.tharun.vitalmind.ui.healthdeviation.HealthDeviationViewModel
+import com.tharun.vitalmind.data.repository.HealthDeviationRepository
 
 data class HealthMetric(
     val type: MetricType,
@@ -850,6 +849,17 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         )
     }
     val stressUiState by stressViewModel.uiState.collectAsState()
+
+    // --- Health Deviation Feature ---
+    val healthDeviationViewModel = remember(state.userId) {
+        HealthDeviationViewModel(
+            HealthDeviationRepository(
+                healthDataRepository = viewModel.repository,
+                userId = state.userId
+            )
+        )
+    }
+    val healthDeviationUiState by healthDeviationViewModel.uiState.collectAsState()
     // ...existing code...
     Scaffold(
         topBar = {
@@ -897,7 +907,14 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                         Text("See your previous stress scores", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+                Spacer(modifier = Modifier.height(24.dp))
+                // --- Health Deviation Card ---
+                HealthDeviationCard(
+                    uiState = healthDeviationUiState,
+                    onAnalyze = { healthDeviationViewModel.analyzeHealthDeviation() }
+                )
                 Spacer(modifier = Modifier.height(24.dp)) // Increased space to prevent overlap
+                // --- End Health Deviation Card ---
                 // --- End Stress Score Card ---
             }
             item {
