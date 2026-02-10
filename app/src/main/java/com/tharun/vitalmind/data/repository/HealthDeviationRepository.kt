@@ -34,9 +34,9 @@ class HealthDeviationRepository(
     private val userId: String
 ) {
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)  // Increased for cold starts
+        .readTimeout(60, TimeUnit.SECONDS)     // Increased for cold starts
+        .writeTimeout(60, TimeUnit.SECONDS)    // Increased for cold starts
         .build()
 
     private val retrofit by lazy {
