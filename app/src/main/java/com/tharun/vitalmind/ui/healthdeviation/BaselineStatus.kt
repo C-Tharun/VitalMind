@@ -14,6 +14,7 @@ enum class BaselineStatus {
 sealed class HealthDeviationUiStateExtended {
     object Idle : HealthDeviationUiStateExtended()
     data class CollectingBaseline(val daysCollected: Int, val daysNeeded: Int) : HealthDeviationUiStateExtended()
+    object TrainingModel : HealthDeviationUiStateExtended()  // Training baseline model on server
     object Ready : HealthDeviationUiStateExtended()
     object Loading : HealthDeviationUiStateExtended()
     data class Success(val response: com.tharun.vitalmind.data.remote.HealthDeviationResponse) : HealthDeviationUiStateExtended()

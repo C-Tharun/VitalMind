@@ -68,6 +68,10 @@ fun HealthDeviationCard(
                     )
                 }
 
+                is HealthDeviationUiStateExtended.TrainingModel -> {
+                    TrainingModelView()
+                }
+
                 is HealthDeviationUiStateExtended.Ready -> {
                     Button(
                         onClick = {
@@ -182,6 +186,45 @@ private fun BaselineCollectionView(daysCollected: Int, daysNeeded: Int) {
         // Info message
         Text(
             text = "💡 Keep syncing your health data daily to build your personalized baseline",
+            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+/**
+ * Shows model training in progress
+ */
+@Composable
+private fun TrainingModelView() {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier
+                .size(48.dp)
+                .padding(8.dp)
+        )
+
+        Text(
+            text = "🧠 Training your personalized baseline model",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Text(
+            text = "This may take a moment...",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+
+        Text(
+            text = "Your baseline data is being processed by our AI to create a personalized health model",
             style = MaterialTheme.typography.bodySmall,
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
