@@ -50,9 +50,9 @@ class HealthDeviationRepository(
     }
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)  // Increased for cold starts
-        .readTimeout(60, TimeUnit.SECONDS)     // Increased for cold starts
-        .writeTimeout(60, TimeUnit.SECONDS)    // Increased for cold starts
+        .connectTimeout(90, TimeUnit.SECONDS)  // Increased for backend cold starts on Render
+        .readTimeout(90, TimeUnit.SECONDS)     // Increased for backend cold starts on Render
+        .writeTimeout(90, TimeUnit.SECONDS)    // Increased for backend cold starts on Render
         .build()
 
     private val retrofit by lazy {
@@ -235,8 +235,10 @@ class HealthDeviationRepository(
         try {
             Log.d("HealthDeviationRepo", "=== Starting Health Deviation Analysis ===")
             Log.d("HealthDeviationRepo", "User ID: $userId")
+            Log.d("HealthDeviationRepo", "⏰ Current time: ${System.currentTimeMillis()}")
 
             // Get all health data for the user
+            Log.d("HealthDeviationRepo", "📊 Fetching health data from repository...")
             val healthDataList = healthDataRepository.getHealthData(userId).first()
             Log.d("HealthDeviationRepo", "Retrieved ${healthDataList.size} health data records")
 
@@ -329,7 +331,8 @@ class HealthDeviationRepository(
         } catch (e: SocketTimeoutException) {
             Log.e("HealthDeviationRepo", "⏱️ Timeout error: ${e.message}", e)
             Log.e("HealthDeviationRepo", "Stack trace:", e)
-            Result.failure(Exception("Request timeout. Please try again."))
+            Log.w("HealthDeviationRepo", "💡 Tip: Backend may be cold-starting. This can take 30-60 seconds on first request.")
+            Result.failure(Exception("Request timeout. The backend may be starting up. Please try again in a moment."))
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string()
             Log.e("HealthDeviationRepo", "🌐 HTTP error ${e.code()}: $errorBody", e)

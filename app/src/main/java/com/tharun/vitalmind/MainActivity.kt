@@ -851,11 +851,15 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
     val stressUiState by stressViewModel.uiState.collectAsState()
 
     // --- Health Deviation Feature ---
+    val baselineTrainingPreferences = remember {
+        com.tharun.vitalmind.data.BaselineTrainingPreferences(context)
+    }
     val healthDeviationViewModel = remember(state.userId) {
         HealthDeviationViewModel(
             HealthDeviationRepository(
                 healthDataRepository = viewModel.repository,
                 baselineDao = db.healthDeviationBaselineDao(),
+                trainingPreferences = baselineTrainingPreferences,
                 userId = state.userId
             )
         )
