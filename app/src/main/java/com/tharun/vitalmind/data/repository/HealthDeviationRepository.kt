@@ -7,6 +7,10 @@ import com.tharun.vitalmind.data.HealthDeviationBaseline
 import com.tharun.vitalmind.data.HealthDeviationBaselineDao
 import com.tharun.vitalmind.data.remote.HealthDeviationRequest
 import com.tharun.vitalmind.data.remote.HealthDeviationResponse
+import com.tharun.vitalmind.data.remote.TrainBaselineRequest
+import com.tharun.vitalmind.data.remote.TrainBaselineResponse
+import com.tharun.vitalmind.data.remote.BaselineDay
+import com.tharun.vitalmind.data.BaselineTrainingPreferences
 import com.tharun.vitalmind.ui.healthdeviation.BaselineStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -27,6 +31,9 @@ import kotlin.math.sqrt
 interface HealthDeviationApiService {
     @POST("/health_deviation")
     suspend fun analyzeHealthDeviation(@Body request: HealthDeviationRequest): HealthDeviationResponse
+
+    @POST("/train_baseline_model")
+    suspend fun trainBaseline(@Body request: TrainBaselineRequest): TrainBaselineResponse
 }
 
 /**
@@ -35,6 +42,7 @@ interface HealthDeviationApiService {
 class HealthDeviationRepository(
     private val healthDataRepository: HealthDataRepository,
     private val baselineDao: HealthDeviationBaselineDao,
+    private val trainingPreferences: BaselineTrainingPreferences,
     private val userId: String
 ) {
     companion object {
@@ -64,6 +72,46 @@ class HealthDeviationRepository(
         val daysCount = baselineDao.getBaselineDaysCount(userId)
         val status = if (daysCount >= MINIMUM_BASELINE_DAYS) BaselineStatus.READY else BaselineStatus.COLLECTING
         Pair(status, daysCount)
+    }
+
+    /**
+     * Check if the baseline model has been trained on the server
+     */
+    fun isModelTrained(): Boolean {
+        return trainingPreferences.isModelTrained(userId)
+    }
+
+    /**
+     * Check if model needs retraining (30 days passed)
+     */
+    fun needsRetraining(): Boolean {
+        return trainingPreferences.needsRetraining(userId)
+    }
+
+    /**
+     * Check if there is new baseline data collected since the last training
+     * Required for monthly retraining to ensure we have fresh data
+     *
+     * @return true if at least 10 baseline days exist AFTER lastTrainingDate
+     */
+    suspend fun hasNewBaselineDataSinceLastTraining(): Boolean = withContext(Dispatchers.IO) {
+        val lastTrainingDate = trainingPreferences.getLastTrainingDate(userId)
+
+        if (lastTrainingDate == 0L) {
+            // Never trained before - check if we have minimum baseline days
+            val allBaseline = baselineDao.getBaselineData(userId).first()
+            return@withContext allBaseline.size >= MINIMUM_BASELINE_DAYS
+        }
+
+        // Get baseline data created AFTER last training
+        val allBaseline = baselineDao.getBaselineData(userId).first()
+        val newBaselineDays = allBaseline.filter { it.timestamp > lastTrainingDate }
+
+        val hasNewData = newBaselineDays.size >= MINIMUM_BASELINE_DAYS
+
+        Log.d("PHBD_TRAINING", "New baseline days since last training: ${newBaselineDays.size} (need $MINIMUM_BASELINE_DAYS)")
+
+        return@withContext hasNewData
     }
 
     /**
@@ -286,10 +334,121 @@ class HealthDeviationRepository(
             val errorBody = e.response()?.errorBody()?.string()
             Log.e("HealthDeviationRepo", "🌐 HTTP error ${e.code()}: $errorBody", e)
             Log.e("HealthDeviationRepo", "Response: ${e.response()}")
-            Result.failure(Exception("Server error: ${e.code()}"))
+
+            // ✅ CRITICAL: Handle 404 - model missing on backend
+            // This can happen after backend redeploy or model expiration
+            if (e.code() == 404) {
+                Log.e("HealthDeviationRepo", "🔄 Model missing on backend (404). Resetting training status.")
+                trainingPreferences.resetTrainingStatus(userId)
+                Log.d("HealthDeviationRepo", "   Training status reset. User will need to retrain model.")
+                Result.failure(Exception("Model missing on server. Please retrain your baseline model."))
+            } else {
+                Result.failure(Exception("Server error: ${e.code()}"))
+            }
         } catch (e: Exception) {
             Log.e("HealthDeviationRepo", "❌ Unexpected error: ${e.javaClass.simpleName} - ${e.message}", e)
             Log.e("HealthDeviationRepo", "Stack trace:", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Train the baseline model on the server using collected baseline data
+     *
+     * DATA SOURCE: Uses ONLY baseline data from baselineDao (NOT healthDataRepository)
+     *
+     * Called when:
+     * 1. Baseline becomes READY (10 days collected) AND model not yet trained
+     * 2. Monthly retraining: 30 days passed AND 10 new baseline days exist
+     *
+     * @return Result.success if training completed, Result.failure otherwise
+     */
+    suspend fun trainBaselineOnServer(): Result<TrainBaselineResponse> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("PHBD_TRAINING", "=== Starting Baseline Model Training ===")
+            Log.d("PHBD_TRAINING", "User ID: $userId")
+
+            // ✅ CRITICAL: Get baseline data ONLY from baselineDao (NOT healthDataRepository)
+            // This ensures we send the pre-aggregated baseline metrics, not raw health data
+            val baselineRecords = baselineDao.getBaselineData(userId).first()
+            Log.d("PHBD_TRAINING", "Retrieved ${baselineRecords.size} baseline records from DAO")
+
+            if (baselineRecords.isEmpty()) {
+                Log.e("PHBD_TRAINING", "❌ No baseline data available for training")
+                return@withContext Result.failure(Exception("No baseline data available"))
+            }
+
+            if (baselineRecords.size < MINIMUM_BASELINE_DAYS) {
+                Log.e("PHBD_TRAINING", "❌ Insufficient baseline data: ${baselineRecords.size} days (need $MINIMUM_BASELINE_DAYS)")
+                return@withContext Result.failure(Exception("Insufficient baseline data"))
+            }
+
+            Log.d("PHBD_TRAINING", "📊 Preparing ${baselineRecords.size} baseline days for training")
+            Log.d("PHBD_TRAINING", "   Date range: ${baselineRecords.last().date} to ${baselineRecords.first().date}")
+
+            // Convert Room entities to API format (using baseline data ONLY)
+            val baselineDays = baselineRecords.map { record ->
+                BaselineDay(
+                    avg_heart_rate = record.avg_heart_rate,
+                    resting_heart_rate = record.resting_heart_rate,
+                    hr_variance = record.hr_variance,
+                    total_sleep_minutes = record.total_sleep_minutes,
+                    steps_total = record.steps_total,
+                    calories_burned = record.calories_burned,
+                    sedentary_ratio = record.sedentary_ratio,
+                    movement_variance = record.movement_variance,
+                    activity_load_index = record.activity_load_index,
+                    sleep_consistency = record.sleep_consistency
+                )
+            }
+
+            // Build training request
+            val request = TrainBaselineRequest(
+                user_id = userId,
+                baseline_data = baselineDays
+            )
+
+            Log.d("PHBD_TRAINING", "📤 Sending baseline to backend for training")
+            Log.d("PHBD_TRAINING", "   Days included: ${baselineDays.size}")
+            Log.d("PHBD_TRAINING", "   Sample (first day): HR=${baselineDays.first().avg_heart_rate}, Steps=${baselineDays.first().steps_total}")
+
+            // Call training endpoint
+            val response = api.trainBaseline(request)
+
+            Log.d("PHBD_TRAINING", "📥 Received response: $response")
+
+            // ✅ CRITICAL: Only set trained flag if backend confirms success
+            if (response.status == "trained" && response.baseline_updated) {
+                Log.d("PHBD_TRAINING", "✅ Baseline training successful!")
+
+                // Save training status to SharedPreferences ONLY on confirmed success
+                trainingPreferences.setModelTrained(userId, true)
+                trainingPreferences.setLastTrainingDate(userId, System.currentTimeMillis())
+
+                Log.d("PHBD_TRAINING", "💾 Training status saved to preferences")
+                Log.d("PHBD_TRAINING", "   modelTrained = true")
+                Log.d("PHBD_TRAINING", "   lastTrainingDate = ${System.currentTimeMillis()}")
+
+                Result.success(response)
+            } else {
+                // Training failed - do NOT set trained flag
+                Log.e("PHBD_TRAINING", "❌ Training failed: status=${response.status}, updated=${response.baseline_updated}")
+                Log.e("PHBD_TRAINING", "   Training status NOT saved (modelTrained remains false)")
+                Result.failure(Exception("Training failed: ${response.status}"))
+            }
+
+        } catch (e: SocketTimeoutException) {
+            Log.e("PHBD_TRAINING", "⏱️ Timeout during training: ${e.message}", e)
+            Log.e("PHBD_TRAINING", "   Training status NOT saved (timeout)")
+            Result.failure(Exception("Training request timeout. Please try again."))
+        } catch (e: HttpException) {
+            val errorBody = e.response()?.errorBody()?.string()
+            Log.e("PHBD_TRAINING", "🌐 HTTP error during training ${e.code()}: $errorBody", e)
+            Log.e("PHBD_TRAINING", "   Training status NOT saved (HTTP error)")
+            Result.failure(Exception("Server error during training: ${e.code()}"))
+        } catch (e: Exception) {
+            Log.e("PHBD_TRAINING", "❌ Unexpected error during training: ${e.javaClass.simpleName} - ${e.message}", e)
+            Log.e("PHBD_TRAINING", "   Training status NOT saved (exception)")
             Result.failure(e)
         }
     }

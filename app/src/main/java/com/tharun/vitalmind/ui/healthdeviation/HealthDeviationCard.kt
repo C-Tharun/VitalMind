@@ -234,87 +234,136 @@ private fun TrainingModelView() {
 }
 
 /**
- * Displays the health deviation analysis results
+ * Displays the health deviation analysis results with intelligent interpretation
  */
 @Composable
 private fun HealthDeviationResult(response: HealthDeviationResponse) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Health Deviation Score
+        // Enhanced Deviation Score Visualization
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = getDriftLevelColor(response.stress_drift_level).copy(alpha = 0.1f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = String.format(Locale.US, "%.1f", response.health_deviation_score),
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = getDriftLevelColor(response.stress_drift_level)
+                )
+                Text(
+                    text = "Deviation Score",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+
+                // Drift Level Badge
+                Surface(
+                    color = getDriftLevelColor(response.stress_drift_level),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        text = response.stress_drift_level.uppercase(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        }
+
+        // Human-Readable Interpretation
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = "💡",
+                    fontSize = 20.sp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(
+                    text = getDriftLevelInterpretation(response.stress_drift_level),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        // Confidence Indicator
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Deviation Score:",
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = String.format(Locale.US, "%.1f", response.health_deviation_score),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        // Stress Drift Level with color coding
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Stress Drift Level:",
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = response.stress_drift_level,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = getDriftLevelColor(response.stress_drift_level)
-            )
-        }
-
-        // Confidence
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Confidence:",
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${(response.confidence * 100).toInt()}%",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        // Partial data caption if confidence < 1.0
-        if (response.confidence < 1.0f) {
-            Text(
-                text = "⚠ Based on partial data",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                fontSize = 12.sp
-            )
-        }
-
-        // Top Contributors
-        if (response.top_contributors.isNotEmpty()) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            Text(
-                text = "Top Contributors:",
+                text = "Analysis Confidence:",
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${(response.confidence * 100).toInt()}%",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (response.confidence >= 0.8f) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                )
+                if (response.confidence < 1.0f) {
+                    Text(
+                        text = " ⚠️",
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
+        }
+
+        // Partial data caption
+        if (response.confidence < 1.0f) {
             Text(
-                text = response.top_contributors.joinToString(", ") { formatContributor(it) },
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 13.sp
+                text = "Based on partial data — sync more health metrics for better accuracy",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                fontSize = 12.sp,
+                lineHeight = 16.sp
             )
+        }
+
+        // Feature-Specific Explanations
+        if (response.top_contributors.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            Text(
+                text = "Key Contributing Factors:",
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp
+            )
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                response.top_contributors.take(3).forEach { contributor ->
+                    FeatureExplanationItem(featureName = contributor)
+                }
+            }
         }
     }
 }
@@ -332,18 +381,94 @@ private fun getDriftLevelColor(level: String): Color {
 }
 
 /**
+ * Returns human-readable interpretation based on drift level
+ */
+private fun getDriftLevelInterpretation(level: String): String {
+    return when (level.lowercase()) {
+        "low" -> "Your health metrics are consistent with your usual baseline patterns. Great job maintaining your routine!"
+        "medium" -> "Some of your physiological metrics show moderate deviation from your personal baseline. This is normal variation, but consider checking your recent habits."
+        "high" -> "Your current health patterns significantly differ from your baseline. Consider reviewing sleep quality, movement patterns, and recovery time. Small adjustments can help."
+        else -> "Analysis completed based on your personalized baseline model."
+    }
+}
+
+/**
+ * Generates human-readable explanation for a feature contributor
+ */
+private fun generateFeatureExplanation(featureName: String): String {
+    return when (featureName) {
+        "steps_total" -> "Your step count differs from your usual daily average"
+        "sedentary_ratio" -> "Your sedentary time was higher or lower than your typical pattern"
+        "movement_variance" -> "Your movement pattern differed from your normal routine"
+        "total_sleep_minutes" -> "Your sleep duration deviated from your baseline"
+        "avg_heart_rate" -> "Your average heart rate varied from your normal range"
+        "resting_heart_rate" -> "Your resting heart rate is outside your typical range"
+        "hr_variance" -> "Your heart rate variability shows unusual fluctuation"
+        "calories_burned" -> "Your calorie expenditure differs from your usual activity level"
+        "activity_load_index" -> "Your overall activity intensity varied from baseline"
+        "sleep_consistency" -> "Your sleep schedule shows more variation than usual"
+        "max_heart_rate" -> "Your maximum heart rate reached an unusual level"
+        "distance_total" -> "Your total distance covered differs from your norm"
+        "activity" -> "Your activity type or intensity varied from typical patterns"
+        "is_sedentary" -> "Your sedentary periods differ from your usual behavior"
+        else -> "This metric shows deviation from your personal baseline"
+    }
+}
+
+/**
+ * Displays a single feature explanation with icon and text
+ */
+@Composable
+private fun FeatureExplanationItem(featureName: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = "•",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = formatContributor(featureName),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = generateFeatureExplanation(featureName),
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/**
  * Converts API field names to human-readable labels
  */
 private fun formatContributor(contributor: String): String {
     return when (contributor) {
-        "total_sleep_minutes" -> "Sleep"
-        "steps_total" -> "Steps"
-        "calories_burned" -> "Calories"
+        "total_sleep_minutes" -> "Sleep Duration"
+        "steps_total" -> "Step Count"
+        "calories_burned" -> "Calories Burned"
         "avg_heart_rate" -> "Heart Rate"
-        "max_heart_rate" -> "Max HR"
+        "resting_heart_rate" -> "Resting HR"
+        "hr_variance" -> "Heart Rate Variability"
+        "max_heart_rate" -> "Max Heart Rate"
         "distance_total" -> "Distance"
-        "activity" -> "Activity"
-        "is_sedentary" -> "Sedentary Time"
+        "activity" -> "Activity Type"
+        "activity_load_index" -> "Activity Intensity"
+        "sedentary_ratio" -> "Sedentary Time"
+        "movement_variance" -> "Movement Pattern"
+        "sleep_consistency" -> "Sleep Schedule"
+        "is_sedentary" -> "Sedentary Behavior"
         else -> contributor.replace("_", " ").replaceFirstChar {
             if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString()
         }
