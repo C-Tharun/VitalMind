@@ -199,7 +199,16 @@ class HealthDeviationViewModel(
             repository.getHealthDeviation()
                 .onSuccess { response ->
                     Log.d("HealthDeviationVM", "✅ Success! Response: $response")
-                    _uiState.value = HealthDeviationUiStateExtended.Success(response)
+
+                    // Fetch baseline and today's metrics for quantitative comparison
+                    val baselineMetrics = repository.getBaselineStatistics()
+                    val todayMetrics = repository.getTodayMetrics()
+
+                    _uiState.value = HealthDeviationUiStateExtended.Success(
+                        response = response,
+                        todayMetrics = todayMetrics,
+                        baselineMetrics = baselineMetrics
+                    )
                 }
                 .onFailure { error ->
                     Log.e("HealthDeviationVM", "❌ Error occurred: ${error.message}", error)
@@ -216,6 +225,29 @@ class HealthDeviationViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    /**
+     * Smart retry function - called from UI retry button
+     *
+     * Handles different error scenarios:
+     * - If model missing (404), triggers retraining via checkBaselineStatus()
+     * - Otherwise, checks current state and takes appropriate action
+     */
+    fun retryAnalysis() {
+        Log.d("HealthDeviationVM", "🔄 retryAnalysis() called")
+
+        val currentState = _uiState.value
+        Log.d("HealthDeviationVM", "Current state: ${currentState.javaClass.simpleName}")
+
+        // If currently in error state and model is not trained, need to retrain
+        if (currentState is HealthDeviationUiStateExtended.Error && !repository.isModelTrained()) {
+            Log.d("HealthDeviationVM", "Model not trained - triggering baseline check and training")
+            checkBaselineStatus()
+        } else {
+            Log.d("HealthDeviationVM", "Retrying analysis")
+            analyzeHealthDeviation()
         }
     }
 }

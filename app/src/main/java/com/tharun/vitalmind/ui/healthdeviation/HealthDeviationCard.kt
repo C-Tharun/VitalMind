@@ -21,7 +21,8 @@ import java.util.Locale
 @Composable
 fun HealthDeviationCard(
     uiState: HealthDeviationUiStateExtended,
-    onAnalyze: () -> Unit
+    onAnalyze: () -> Unit,
+    onRetry: () -> Unit
 ) {
     // Log current state for debugging
     LaunchedEffect(uiState) {
@@ -112,7 +113,11 @@ fun HealthDeviationCard(
                 }
 
                 is HealthDeviationUiStateExtended.Success -> {
-                    HealthDeviationResult(response = uiState.response)
+                    HealthDeviationResult(
+                        response = uiState.response,
+                        todayMetrics = uiState.todayMetrics,
+                        baselineMetrics = uiState.baselineMetrics
+                    )
                 }
 
                 is HealthDeviationUiStateExtended.Error -> {
@@ -132,7 +137,7 @@ fun HealthDeviationCard(
                         Button(
                             onClick = {
                                 Log.d("HealthDeviationCard", "🔄 Retry button clicked")
-                                onAnalyze()
+                                onRetry()
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -254,11 +259,17 @@ private fun TrainingModelView() {
 
 /**
  * Displays the health deviation analysis results with intelligent interpretation
+ * and quantitative baseline comparisons
  */
 @Composable
-private fun HealthDeviationResult(response: HealthDeviationResponse) {
+private fun HealthDeviationResult(
+    response: HealthDeviationResponse,
+    todayMetrics: TodayMetrics?,
+    baselineMetrics: BaselineMetrics?
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Enhanced Deviation Score Visualization
+
+        // 🎯 PRIMARY: Drift Level Badge (Enhanced Visual Hierarchy)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -269,37 +280,45 @@ private fun HealthDeviationResult(response: HealthDeviationResponse) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // Drift Level (Primary)
                 Text(
-                    text = String.format(Locale.US, "%.1f", response.health_deviation_score),
-                    fontSize = 48.sp,
+                    text = "Health Drift: ${response.stress_drift_level.uppercase()}",
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = getDriftLevelColor(response.stress_drift_level)
                 )
-                Text(
-                    text = "Deviation Score",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
 
-                // Drift Level Badge
-                Surface(
-                    color = getDriftLevelColor(response.stress_drift_level),
-                    shape = RoundedCornerShape(20.dp)
+                // Score (Secondary)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = response.stress_drift_level.uppercase(),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                        color = Color.White,
+                        text = "Score: ",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Text(
+                        text = String.format(Locale.US, "%.1f", response.health_deviation_score),
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        color = getDriftLevelColor(response.stress_drift_level)
                     )
                 }
+
+                // Confidence (Tertiary)
+                Text(
+                    text = "Confidence: ${(response.confidence * 100).toInt()}%",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (response.confidence >= 0.8f) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                )
             }
         }
 
-        // Human-Readable Interpretation
+        // 📊 DRIFT INTERPRETATION with Scientific Context
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -316,74 +335,279 @@ private fun HealthDeviationResult(response: HealthDeviationResponse) {
                     fontSize = 20.sp,
                     modifier = Modifier.padding(end = 8.dp)
                 )
-                Text(
-                    text = getDriftLevelInterpretation(response.stress_drift_level),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                )
-            }
-        }
-
-        // Confidence Indicator
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Analysis Confidence:",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${(response.confidence * 100).toInt()}%",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (response.confidence >= 0.8f) Color(0xFF4CAF50) else Color(0xFFFF9800)
-                )
-                if (response.confidence < 1.0f) {
+                Column {
                     Text(
-                        text = " ⚠️",
+                        text = getEnhancedDriftInterpretation(response.stress_drift_level),
+                        style = MaterialTheme.typography.bodyMedium,
                         fontSize = 14.sp,
-                        modifier = Modifier.padding(start = 4.dp)
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = getScientificContext(response.stress_drift_level),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
         }
 
-        // Partial data caption
+        // Partial data warning
         if (response.confidence < 1.0f) {
-            Text(
-                text = "Based on partial data — sync more health metrics for better accuracy",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                lineHeight = 16.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚠️ ",
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "Sync more health metrics for better accuracy",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    fontSize = 12.sp
+                )
+            }
         }
 
-        // Feature-Specific Explanations
+        // 🔬 QUANTITATIVE FEATURE EXPLANATIONS
         if (response.top_contributors.isNotEmpty()) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             Text(
-                text = "Key Contributing Factors:",
+                text = "📈 Contributing Factors",
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.primary
             )
 
             Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 4.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = 6.dp)
             ) {
                 response.top_contributors.take(3).forEach { contributor ->
-                    FeatureExplanationItem(featureName = contributor)
+                    QuantitativeFeatureExplanation(
+                        featureName = contributor,
+                        todayMetrics = todayMetrics,
+                        baselineMetrics = baselineMetrics
+                    )
                 }
             }
         }
+    }
+}
+
+/**
+ * Enhanced drift interpretation with more scientific context
+ */
+private fun getEnhancedDriftInterpretation(level: String): String {
+    return when (level.lowercase()) {
+        "low" -> "Today's deviation is within your normal variability range."
+        "medium" -> "Today's deviation slightly exceeds your typical variability."
+        "high" -> "Today's deviation significantly exceeds your normal baseline pattern."
+        else -> "Analysis completed based on your personalized baseline model."
+    }
+}
+
+/**
+ * Scientific context for drift level
+ */
+private fun getScientificContext(level: String): String {
+    return when (level.lowercase()) {
+        "low" -> "Your physiological metrics are consistent with your established baseline. Continue your current routines."
+        "medium" -> "Some metrics show moderate variation. This is often normal but worth monitoring over the next few days."
+        "high" -> "Multiple metrics deviate from baseline. Consider reviewing sleep quality, activity patterns, and stress levels."
+        else -> ""
+    }
+}
+
+/**
+ * Displays quantitative comparison between today's value and baseline
+ */
+@Composable
+private fun QuantitativeFeatureExplanation(
+    featureName: String,
+    todayMetrics: TodayMetrics?,
+    baselineMetrics: BaselineMetrics?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            // Feature Name
+            Text(
+                text = formatContributor(featureName),
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Quantitative Explanation
+            if (todayMetrics != null && baselineMetrics != null) {
+                val explanation = generateQuantitativeExplanation(
+                    featureName = featureName,
+                    todayMetrics = todayMetrics,
+                    baselineMetrics = baselineMetrics
+                )
+
+                if (explanation != null) {
+                    Text(
+                        text = explanation,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                } else {
+                    // Fallback to generic explanation
+                    Text(
+                        text = generateFeatureExplanation(featureName),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            } else {
+                // No metrics available - show generic explanation
+                Text(
+                    text = generateFeatureExplanation(featureName),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Generates quantitative explanation comparing today vs baseline
+ */
+private fun generateQuantitativeExplanation(
+    featureName: String,
+    todayMetrics: TodayMetrics,
+    baselineMetrics: BaselineMetrics
+): String? {
+    return when (featureName) {
+        "total_sleep_minutes", "sleep_minutes" -> {
+            val today = todayMetrics.sleepMinutes
+            val baseline = baselineMetrics.avgSleepMinutes
+            if (baseline == 0f) return null
+
+            val diff = today - baseline
+            val hours = kotlin.math.abs(diff / 60f)
+            val minutes = kotlin.math.abs(diff % 60f).toInt()
+
+            if (diff < 0) {
+                "Your sleep was ${hours.toInt()}h ${minutes}m shorter than your baseline (${(baseline / 60).toInt()}h ${(baseline % 60).toInt()}m avg)."
+            } else if (diff > 0) {
+                "Your sleep was ${hours.toInt()}h ${minutes}m longer than your baseline (${(baseline / 60).toInt()}h ${(baseline % 60).toInt()}m avg)."
+            } else {
+                "Your sleep duration matched your baseline."
+            }
+        }
+
+        "steps_total", "steps" -> {
+            val today = todayMetrics.steps.toFloat()
+            val baseline = baselineMetrics.avgSteps
+            if (baseline == 0f) return null
+
+            val percent = ((today - baseline) / baseline * 100).toInt()
+            val diff = kotlin.math.abs(today - baseline).toInt()
+
+            if (percent < 0) {
+                "Your step count was $diff steps lower (${kotlin.math.abs(percent)}% below baseline of ${baseline.toInt()})."
+            } else if (percent > 0) {
+                "Your step count was $diff steps higher (${kotlin.math.abs(percent)}% above baseline of ${baseline.toInt()})."
+            } else {
+                "Your step count matched your baseline."
+            }
+        }
+
+        "calories_burned", "calories" -> {
+            val today = todayMetrics.calories
+            val baseline = baselineMetrics.avgCalories
+            if (baseline == 0f) return null
+
+            val percent = ((today - baseline) / baseline * 100).toInt()
+            val diff = kotlin.math.abs(today - baseline).toInt()
+
+            if (percent < 0) {
+                "Calorie expenditure was ${diff} kcal lower (${kotlin.math.abs(percent)}% below baseline)."
+            } else if (percent > 0) {
+                "Calorie expenditure was ${diff} kcal higher (${kotlin.math.abs(percent)}% above baseline)."
+            } else {
+                "Calorie expenditure matched your baseline."
+            }
+        }
+
+        "avg_heart_rate", "heart_rate" -> {
+            val today = todayMetrics.avgHeartRate
+            val baseline = baselineMetrics.avgHeartRate
+            if (baseline == 0f) return null
+
+            val diff = (today - baseline).toInt()
+
+            if (diff < 0) {
+                "Average heart rate was ${kotlin.math.abs(diff)} bpm lower than baseline (${baseline.toInt()} bpm)."
+            } else if (diff > 0) {
+                "Average heart rate was ${diff} bpm higher than baseline (${baseline.toInt()} bpm)."
+            } else {
+                "Heart rate matched your baseline."
+            }
+        }
+
+        "resting_heart_rate" -> {
+            val today = todayMetrics.restingHeartRate
+            val baseline = baselineMetrics.avgRestingHeartRate
+            if (baseline == 0f) return null
+
+            val diff = (today - baseline).toInt()
+
+            if (diff < 0) {
+                "Resting HR was ${kotlin.math.abs(diff)} bpm lower than baseline (${baseline.toInt()} bpm)."
+            } else if (diff > 0) {
+                "Resting HR was ${diff} bpm higher than baseline (${baseline.toInt()} bpm)."
+            } else {
+                "Resting heart rate matched your baseline."
+            }
+        }
+
+        "sedentary_ratio" -> {
+            "Your sedentary time pattern differed from your typical daily routine."
+        }
+
+        "movement_variance" -> {
+            "Your movement pattern varied from your normal activity distribution."
+        }
+
+        "activity_load_index" -> {
+            "Your overall activity intensity differed from your usual exertion level."
+        }
+
+        "sleep_consistency", "hr_variance" -> {
+            // These are variance metrics - harder to explain quantitatively
+            null
+        }
+
+        else -> null
     }
 }
 
@@ -400,19 +624,8 @@ private fun getDriftLevelColor(level: String): Color {
 }
 
 /**
- * Returns human-readable interpretation based on drift level
- */
-private fun getDriftLevelInterpretation(level: String): String {
-    return when (level.lowercase()) {
-        "low" -> "Your health metrics are consistent with your usual baseline patterns. Great job maintaining your routine!"
-        "medium" -> "Some of your physiological metrics show moderate deviation from your personal baseline. This is normal variation, but consider checking your recent habits."
-        "high" -> "Your current health patterns significantly differ from your baseline. Consider reviewing sleep quality, movement patterns, and recovery time. Small adjustments can help."
-        else -> "Analysis completed based on your personalized baseline model."
-    }
-}
-
-/**
  * Generates human-readable explanation for a feature contributor
+ * Fallback for when quantitative comparison is not available
  */
 private fun generateFeatureExplanation(featureName: String): String {
     return when (featureName) {
@@ -434,40 +647,6 @@ private fun generateFeatureExplanation(featureName: String): String {
     }
 }
 
-/**
- * Displays a single feature explanation with icon and text
- */
-@Composable
-private fun FeatureExplanationItem(featureName: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = "•",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(end = 8.dp)
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = formatContributor(featureName),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = generateFeatureExplanation(featureName),
-                style = MaterialTheme.typography.bodySmall,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 2.dp)
-            )
-        }
-    }
-}
 
 /**
  * Converts API field names to human-readable labels
