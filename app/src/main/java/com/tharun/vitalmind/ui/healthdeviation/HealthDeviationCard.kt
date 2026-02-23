@@ -326,31 +326,60 @@ private fun HealthDeviationResult(
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = "💡",
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Column {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.Top
+                ) {
                     Text(
-                        text = getEnhancedDriftInterpretation(response.stress_drift_level),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                        text = "💡",
+                        fontSize = 20.sp,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
+                    Column {
+                        Text(
+                            text = getEnhancedDriftInterpretation(response.stress_drift_level),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = getScientificContext(response.stress_drift_level),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+
+                // Analytical Summary Sentence
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = getAnalyticalSummary(
+                        driftLevel = response.stress_drift_level,
+                        topContributors = response.top_contributors
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(start = 28.dp)
+                )
+
+                // Safety Context for HIGH drift
+                if (response.stress_drift_level.lowercase() == "high") {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = getScientificContext(response.stress_drift_level),
+                        text = "High drift reflects a significant change from your normal pattern and does not necessarily indicate a health issue.",
                         style = MaterialTheme.typography.bodySmall,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(start = 28.dp)
                     )
                 }
             }
@@ -423,6 +452,25 @@ private fun getScientificContext(level: String): String {
         "low" -> "Your physiological metrics are consistent with your established baseline. Continue your current routines."
         "medium" -> "Some metrics show moderate variation. This is often normal but worth monitoring over the next few days."
         "high" -> "Multiple metrics deviate from baseline. Consider reviewing sleep quality, activity patterns, and stress levels."
+        else -> ""
+    }
+}
+
+/**
+ * Analytical summary sentence based on drift level and top contributors
+ */
+private fun getAnalyticalSummary(driftLevel: String, topContributors: List<String>): String {
+    return when (driftLevel.lowercase()) {
+        "high" -> {
+            if (topContributors.isNotEmpty()) {
+                val topFeature = formatContributor(topContributors.first())
+                "Your elevated $topFeature appears to be the primary driver of today's drift."
+            } else {
+                "Multiple factors are contributing to today's elevated drift."
+            }
+        }
+        "medium" -> "A few metrics are moderately contributing to your deviation."
+        "low" -> "Minor variations detected, but overall pattern remains stable."
         else -> ""
     }
 }
@@ -529,15 +577,29 @@ private fun generateQuantitativeExplanation(
             val baseline = baselineMetrics.avgSteps
             if (baseline == 0f) return null
 
-            val percent = ((today - baseline) / baseline * 100).toInt()
+            val multiplier = today / baseline
+            val percent = ((today - baseline) / baseline * 100)
             val diff = kotlin.math.abs(today - baseline).toInt()
 
-            if (percent < 0) {
-                "Your step count was $diff steps lower (${kotlin.math.abs(percent)}% below baseline of ${baseline.toInt()})."
-            } else if (percent > 0) {
-                "Your step count was $diff steps higher (${kotlin.math.abs(percent)}% above baseline of ${baseline.toInt()})."
-            } else {
-                "Your step count matched your baseline."
+            when {
+                today < baseline -> {
+                    // Steps lower than baseline
+                    if (kotlin.math.abs(percent) > 300) {
+                        val inverseMultiplier = baseline / today
+                        "Your step count was ${String.format("%.1f", inverseMultiplier)}× lower than your usual level (${baseline.toInt()} avg)."
+                    } else {
+                        "Your step count was $diff steps lower (${kotlin.math.abs(percent).toInt()}% below baseline of ${baseline.toInt()})."
+                    }
+                }
+                today > baseline -> {
+                    // Steps higher than baseline
+                    if (percent > 300) {
+                        "Your step count was ${String.format("%.1f", multiplier)}× your usual level (${baseline.toInt()} avg)."
+                    } else {
+                        "Your step count was $diff steps higher (${percent.toInt()}% above baseline of ${baseline.toInt()})."
+                    }
+                }
+                else -> "Your step count matched your baseline."
             }
         }
 
@@ -546,15 +608,27 @@ private fun generateQuantitativeExplanation(
             val baseline = baselineMetrics.avgCalories
             if (baseline == 0f) return null
 
-            val percent = ((today - baseline) / baseline * 100).toInt()
+            val multiplier = today / baseline
+            val percent = ((today - baseline) / baseline * 100)
             val diff = kotlin.math.abs(today - baseline).toInt()
 
-            if (percent < 0) {
-                "Calorie expenditure was ${diff} kcal lower (${kotlin.math.abs(percent)}% below baseline)."
-            } else if (percent > 0) {
-                "Calorie expenditure was ${diff} kcal higher (${kotlin.math.abs(percent)}% above baseline)."
-            } else {
-                "Calorie expenditure matched your baseline."
+            when {
+                today < baseline -> {
+                    if (kotlin.math.abs(percent) > 300) {
+                        val inverseMultiplier = baseline / today
+                        "Calorie expenditure was ${String.format("%.1f", inverseMultiplier)}× lower than usual."
+                    } else {
+                        "Calorie expenditure was ${diff} kcal lower (${kotlin.math.abs(percent).toInt()}% below baseline)."
+                    }
+                }
+                today > baseline -> {
+                    if (percent > 300) {
+                        "Calorie expenditure was ${String.format("%.1f", multiplier)}× your usual level."
+                    } else {
+                        "Calorie expenditure was ${diff} kcal higher (${percent.toInt()}% above baseline)."
+                    }
+                }
+                else -> "Calorie expenditure matched your baseline."
             }
         }
 
