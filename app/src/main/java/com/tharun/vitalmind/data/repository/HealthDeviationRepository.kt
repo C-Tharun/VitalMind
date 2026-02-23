@@ -639,7 +639,82 @@ class HealthDeviationRepository(
         Log.d("HealthDeviationRepo", "Sleep variance computed: $normalizedVariance (${dailySleep.size} days)")
         return normalizedVariance
     }
+
+    /**
+     * Get baseline statistics for UI comparison
+     * Used ONLY for display purposes, does NOT affect deviation calculation
+     */
+    suspend fun getBaselineStatistics(): com.tharun.vitalmind.ui.healthdeviation.BaselineMetrics? = withContext(Dispatchers.IO) {
+        try {
+            val baselineData = baselineDao.getBaselineData(userId).first()
+            if (baselineData.isEmpty()) return@withContext null
+
+            val avgSteps = baselineData.map { it.steps_total }.average().toFloat()
+            val avgSleep = baselineData.map { it.total_sleep_minutes }.average().toFloat()
+            val avgCalories = baselineData.map { it.calories_burned }.average().toFloat()
+            val avgHR = baselineData.map { it.avg_heart_rate }.average().toFloat()
+            val avgRestingHR = baselineData.map { it.resting_heart_rate }.average().toFloat()
+
+            com.tharun.vitalmind.ui.healthdeviation.BaselineMetrics(
+                avgSteps = avgSteps,
+                avgSleepMinutes = avgSleep,
+                avgCalories = avgCalories,
+                avgHeartRate = avgHR,
+                avgRestingHeartRate = avgRestingHR
+            )
+        } catch (e: Exception) {
+            Log.w("HealthDeviationRepo", "Could not compute baseline statistics: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Get today's metrics for UI comparison
+     * Used ONLY for display purposes, does NOT affect deviation calculation
+     */
+    suspend fun getTodayMetrics(): com.tharun.vitalmind.ui.healthdeviation.TodayMetrics? = withContext(Dispatchers.IO) {
+        try {
+            val healthDataList = healthDataRepository.getHealthData(userId).first()
+            if (healthDataList.isEmpty()) return@withContext null
+
+            // Get today's start timestamp
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val todayStart = cal.timeInMillis
+            val todayEnd = todayStart + (24L * 60 * 60 * 1000)
+
+            val todayData = healthDataList.filter { it.timestamp >= todayStart && it.timestamp < todayEnd }
+
+            if (todayData.isEmpty()) return@withContext null
+
+            val steps = todayData.sumOf { it.steps ?: 0 }
+            val sleepMinutes = (todayData.sumOf { it.sleepDuration ?: 0L } / 60000L).toInt()
+            val calories = todayData.mapNotNull { it.calories }.sum()
+
+            val heartRates = todayData.mapNotNull { it.heartRate }
+            val avgHR = if (heartRates.isNotEmpty()) heartRates.average().toFloat() else 70f
+
+            // Compute resting HR same way as deviation analysis
+            val recentData = healthDataList.takeLast(1000)
+            val restingHR = computeRestingHeartRate(recentData, avgHR)
+
+            com.tharun.vitalmind.ui.healthdeviation.TodayMetrics(
+                steps = steps,
+                sleepMinutes = sleepMinutes,
+                calories = calories,
+                avgHeartRate = avgHR,
+                restingHeartRate = restingHR
+            )
+        } catch (e: Exception) {
+            Log.w("HealthDeviationRepo", "Could not compute today's metrics: ${e.message}")
+            null
+        }
+    }
 }
+
 
 
 

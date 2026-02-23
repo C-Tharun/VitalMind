@@ -916,7 +916,8 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                 // --- Health Deviation Card ---
                 HealthDeviationCard(
                     uiState = healthDeviationUiState,
-                    onAnalyze = { healthDeviationViewModel.analyzeHealthDeviation() }
+                    onAnalyze = { healthDeviationViewModel.analyzeHealthDeviation() },
+                    onRetry = { healthDeviationViewModel.retryAnalysis() }
                 )
                 Spacer(modifier = Modifier.height(24.dp)) // Increased space to prevent overlap
                 // --- End Health Deviation Card ---
