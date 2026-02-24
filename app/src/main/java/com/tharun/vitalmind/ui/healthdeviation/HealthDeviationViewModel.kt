@@ -1,5 +1,10 @@
 package com.tharun.vitalmind.ui.healthdeviation
 
+import android.content.ContentValues
+import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +12,8 @@ import com.tharun.vitalmind.data.repository.HealthDeviationRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
  * ViewModel for Health Deviation (PHBD-Net) feature with personalized baseline support
@@ -17,6 +24,10 @@ class HealthDeviationViewModel(
 
     private val _uiState = MutableStateFlow<HealthDeviationUiStateExtended>(HealthDeviationUiStateExtended.Idle)
     val uiState: StateFlow<HealthDeviationUiStateExtended> = _uiState
+
+    // Export state for showing feedback to user
+    private val _exportMessage = MutableStateFlow<String?>(null)
+    val exportMessage: StateFlow<String?> = _exportMessage
 
     init {
         /**
@@ -249,6 +260,100 @@ class HealthDeviationViewModel(
             Log.d("HealthDeviationVM", "Retrying analysis")
             analyzeHealthDeviation()
         }
+    }
+
+    /**
+     * Export baseline data to CSV file in Documents/VitalMindExports/
+     *
+     * ⚠️ CRITICAL: This is READ-ONLY - does NOT modify baseline data or training status
+     *
+     * Uses MediaStore (scoped storage) for Android 10+ compatibility
+     * Saves to: Documents/VitalMindExports/vitalmind_baseline_user_{userId}_{YYYYMMDD}.csv
+     *
+     * @param context Android context needed for ContentResolver
+     */
+    fun exportBaselineData(context: Context) {
+        Log.d("HealthDeviationVM", "📤 exportBaselineData() called")
+
+        viewModelScope.launch {
+            try {
+                // Step 1: Get CSV content from repository (read-only operation)
+                Log.d("HealthDeviationVM", "Fetching baseline data from repository...")
+                val csvResult = repository.exportBaselineDataToCsv()
+
+                if (csvResult.isFailure) {
+                    val errorMsg = csvResult.exceptionOrNull()?.message ?: "Export failed"
+                    Log.e("HealthDeviationVM", "❌ Export failed: $errorMsg")
+                    _exportMessage.value = errorMsg
+                    return@launch
+                }
+
+                val csvContent = csvResult.getOrNull() ?: ""
+                if (csvContent.isEmpty()) {
+                    Log.e("HealthDeviationVM", "❌ CSV content is empty")
+                    _exportMessage.value = "No data to export"
+                    return@launch
+                }
+
+                Log.d("HealthDeviationVM", "✅ CSV generated: ${csvContent.lines().size} lines")
+
+                // Step 2: Generate filename with date
+                val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                val dateString = dateFormat.format(Date())
+                val userId = repository.hashCode().toString() // Using repository hashCode as simple identifier
+                val filename = "vitalmind_baseline_${dateString}.csv"
+
+                Log.d("HealthDeviationVM", "Saving to filename: $filename")
+
+                // Step 3: Save to MediaStore (scoped storage for Android 10+)
+                val contentResolver = context.contentResolver
+
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOCUMENTS}/VitalMindExports")
+                    }
+                }
+
+                val uri = contentResolver.insert(
+                    MediaStore.Files.getContentUri("external"),
+                    contentValues
+                )
+
+                if (uri == null) {
+                    Log.e("HealthDeviationVM", "❌ Failed to create MediaStore entry")
+                    _exportMessage.value = "Failed to create export file"
+                    return@launch
+                }
+
+                Log.d("HealthDeviationVM", "MediaStore URI created: $uri")
+
+                // Write CSV content to file
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(csvContent.toByteArray())
+                    outputStream.flush()
+                    Log.d("HealthDeviationVM", "✅ CSV written to file successfully")
+                }
+
+                // Success!
+                val successMsg = "Baseline exported successfully to Documents/VitalMindExports"
+                Log.d("HealthDeviationVM", "✅ $successMsg")
+                _exportMessage.value = successMsg
+
+            } catch (e: Exception) {
+                Log.e("HealthDeviationVM", "❌ Export error: ${e.message}", e)
+                _exportMessage.value = "Export failed: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Clear export message after user has seen it
+     */
+    fun clearExportMessage() {
+        _exportMessage.value = null
     }
 }
 

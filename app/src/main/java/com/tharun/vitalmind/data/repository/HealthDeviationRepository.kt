@@ -713,6 +713,62 @@ class HealthDeviationRepository(
             null
         }
     }
+
+    /**
+     * Export baseline data to CSV format (read-only, for research evaluation)
+     *
+     * ⚠️ CRITICAL: This is READ-ONLY - does NOT modify or delete baseline data
+     * Does NOT affect training status or model files
+     *
+     * @return CSV string with header and all baseline records
+     */
+    suspend fun exportBaselineDataToCsv(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("HealthDeviationRepo", "📤 Starting baseline export (read-only)")
+            Log.d("HealthDeviationRepo", "User ID: $userId")
+
+            // Read-only query - fetch all baseline data
+            val baselineRecords = baselineDao.getBaselineData(userId).first()
+
+            if (baselineRecords.isEmpty()) {
+                Log.w("HealthDeviationRepo", "⚠️ No baseline data available for export")
+                return@withContext Result.failure(Exception("No baseline data available to export"))
+            }
+
+            Log.d("HealthDeviationRepo", "Retrieved ${baselineRecords.size} baseline records for export")
+
+            // Build CSV with header
+            val csvBuilder = StringBuilder()
+
+            // CSV Header
+            csvBuilder.appendLine(
+                "date,timestamp,avg_heart_rate,resting_heart_rate,hr_variance," +
+                        "steps_total,total_sleep_minutes,calories_burned," +
+                        "sedentary_ratio,movement_variance,activity_load_index,sleep_consistency"
+            )
+
+            // Add each baseline record as CSV row
+            baselineRecords.forEach { record ->
+                csvBuilder.appendLine(
+                    "${record.date},${record.timestamp}," +
+                            "${record.avg_heart_rate},${record.resting_heart_rate},${record.hr_variance}," +
+                            "${record.steps_total},${record.total_sleep_minutes},${record.calories_burned}," +
+                            "${record.sedentary_ratio},${record.movement_variance}," +
+                            "${record.activity_load_index},${record.sleep_consistency}"
+                )
+            }
+
+            val csvContent = csvBuilder.toString()
+            Log.d("HealthDeviationRepo", "✅ CSV generated successfully (${csvContent.lines().size} lines)")
+            Log.d("HealthDeviationRepo", "   Baseline data remains unchanged (read-only operation)")
+
+            Result.success(csvContent)
+
+        } catch (e: Exception) {
+            Log.e("HealthDeviationRepo", "❌ Error exporting baseline data: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
 
 

@@ -865,6 +865,16 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         )
     }
     val healthDeviationUiState by healthDeviationViewModel.uiState.collectAsState()
+    val healthDeviationExportMessage by healthDeviationViewModel.exportMessage.collectAsState()
+
+    // Clear export message after it's shown
+    LaunchedEffect(healthDeviationExportMessage) {
+        healthDeviationExportMessage?.let {
+            // Message will be shown in snackbar, clear after 3 seconds
+            kotlinx.coroutines.delay(3000)
+            healthDeviationViewModel.clearExportMessage()
+        }
+    }
     // ...existing code...
     Scaffold(
         topBar = {
@@ -917,7 +927,9 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                 HealthDeviationCard(
                     uiState = healthDeviationUiState,
                     onAnalyze = { healthDeviationViewModel.analyzeHealthDeviation() },
-                    onRetry = { healthDeviationViewModel.retryAnalysis() }
+                    onRetry = { healthDeviationViewModel.retryAnalysis() },
+                    onExport = { healthDeviationViewModel.exportBaselineData(context) },
+                    exportMessage = healthDeviationExportMessage
                 )
                 Spacer(modifier = Modifier.height(24.dp)) // Increased space to prevent overlap
                 // --- End Health Deviation Card ---

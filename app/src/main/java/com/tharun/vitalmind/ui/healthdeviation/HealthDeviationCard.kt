@@ -3,6 +3,8 @@ package com.tharun.vitalmind.ui.healthdeviation
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,7 +24,9 @@ import java.util.Locale
 fun HealthDeviationCard(
     uiState: HealthDeviationUiStateExtended,
     onAnalyze: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onExport: () -> Unit,
+    exportMessage: String?
 ) {
     // Log current state for debugging
     LaunchedEffect(uiState) {
@@ -32,121 +36,171 @@ fun HealthDeviationCard(
         }
     }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Health Deviation Analysis",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+    // Snackbar host state for showing export messages
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show snackbar when export message changes
+    LaunchedEffect(exportMessage) {
+        exportMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
             )
-            Text(
-                text = "Personalized baseline deviation using ML",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+        }
+    }
 
-            when (uiState) {
-                is HealthDeviationUiStateExtended.Idle -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(8.dp)
+    Box {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                elevation = CardDefaults.cardElevation(4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Health Deviation Analysis",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                }
-
-                is HealthDeviationUiStateExtended.CollectingBaseline -> {
-                    BaselineCollectionView(
-                        daysCollected = uiState.daysCollected,
-                        daysNeeded = uiState.daysNeeded
+                    Text(
+                        text = "Personalized baseline deviation using ML",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
-                }
 
-                is HealthDeviationUiStateExtended.TrainingModel -> {
-                    TrainingModelView()
-                }
+                    when (uiState) {
+                        is HealthDeviationUiStateExtended.Idle -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(8.dp)
+                            )
+                        }
 
-                is HealthDeviationUiStateExtended.Ready -> {
-                    Button(
-                        onClick = {
-                            Log.d("HealthDeviationCard", "🔵 Analyze Deviation button clicked")
-                            onAnalyze()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Analyze Deviation")
-                    }
-                }
+                        is HealthDeviationUiStateExtended.CollectingBaseline -> {
+                            BaselineCollectionView(
+                                daysCollected = uiState.daysCollected,
+                                daysNeeded = uiState.daysNeeded
+                            )
+                        }
 
-                is HealthDeviationUiStateExtended.Loading -> {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .padding(8.dp)
-                        )
-                        Text(
-                            text = "Analyzing your health patterns...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "This may take 30-60 seconds if the backend is starting up",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                        is HealthDeviationUiStateExtended.TrainingModel -> {
+                            TrainingModelView()
+                        }
 
-                is HealthDeviationUiStateExtended.Success -> {
-                    HealthDeviationResult(
-                        response = uiState.response,
-                        todayMetrics = uiState.todayMetrics,
-                        baselineMetrics = uiState.baselineMetrics
-                    )
-                }
+                        is HealthDeviationUiStateExtended.Ready -> {
+                            Button(
+                                onClick = {
+                                    Log.d("HealthDeviationCard", "🔵 Analyze Deviation button clicked")
+                                    onAnalyze()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Analyze Deviation")
+                            }
+                        }
 
-                is HealthDeviationUiStateExtended.Error -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "⚠️ ${uiState.message}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "Health deviation unavailable today",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Button(
-                            onClick = {
-                                Log.d("HealthDeviationCard", "🔄 Retry button clicked")
-                                onRetry()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Retry")
+                        is HealthDeviationUiStateExtended.Loading -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .padding(8.dp)
+                                )
+                                Text(
+                                    text = "Analyzing your health patterns...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "This may take 30-60 seconds if the backend is starting up",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
+                        is HealthDeviationUiStateExtended.Success -> {
+                            HealthDeviationResult(
+                                response = uiState.response,
+                                todayMetrics = uiState.todayMetrics,
+                                baselineMetrics = uiState.baselineMetrics
+                            )
+                        }
+
+                        is HealthDeviationUiStateExtended.Error -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "⚠️ ${uiState.message}",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "Health deviation unavailable today",
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Button(
+                                    onClick = {
+                                        Log.d("HealthDeviationCard", "🔄 Retry button clicked")
+                                        onRetry()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Retry")
+                                }
+                            }
                         }
                     }
                 }
             }
+
+            // Export Baseline Data button (for research evaluation)
+            // Only show when baseline data exists (not during Idle state)
+            if (uiState !is HealthDeviationUiStateExtended.Idle) {
+                OutlinedButton(
+                    onClick = {
+                        Log.d("HealthDeviationCard", "📤 Export Baseline button clicked")
+                        onExport()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = "Export",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Export Baseline Data")
+                }
+            }
         }
+
+        // Snackbar at bottom of screen
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
+        )
     }
 }
 
@@ -176,7 +230,7 @@ private fun BaselineCollectionView(daysCollected: Int, daysNeeded: Int) {
 
         // Progress bar
         LinearProgressIndicator(
-            progress = progress,
+            progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp),
@@ -586,7 +640,7 @@ private fun generateQuantitativeExplanation(
                     // Steps lower than baseline
                     if (kotlin.math.abs(percent) > 300) {
                         val inverseMultiplier = baseline / today
-                        "Your step count was ${String.format("%.1f", inverseMultiplier)}× lower than your usual level (${baseline.toInt()} avg)."
+                        "Your step count was ${String.format(Locale.US, "%.1f", inverseMultiplier)}× lower than your usual level (${baseline.toInt()} avg)."
                     } else {
                         "Your step count was $diff steps lower (${kotlin.math.abs(percent).toInt()}% below baseline of ${baseline.toInt()})."
                     }
@@ -594,7 +648,7 @@ private fun generateQuantitativeExplanation(
                 today > baseline -> {
                     // Steps higher than baseline
                     if (percent > 300) {
-                        "Your step count was ${String.format("%.1f", multiplier)}× your usual level (${baseline.toInt()} avg)."
+                        "Your step count was ${String.format(Locale.US, "%.1f", multiplier)}× your usual level (${baseline.toInt()} avg)."
                     } else {
                         "Your step count was $diff steps higher (${percent.toInt()}% above baseline of ${baseline.toInt()})."
                     }
@@ -616,14 +670,14 @@ private fun generateQuantitativeExplanation(
                 today < baseline -> {
                     if (kotlin.math.abs(percent) > 300) {
                         val inverseMultiplier = baseline / today
-                        "Calorie expenditure was ${String.format("%.1f", inverseMultiplier)}× lower than usual."
+                        "Calorie expenditure was ${String.format(Locale.US, "%.1f", inverseMultiplier)}× lower than usual."
                     } else {
                         "Calorie expenditure was ${diff} kcal lower (${kotlin.math.abs(percent).toInt()}% below baseline)."
                     }
                 }
                 today > baseline -> {
                     if (percent > 300) {
-                        "Calorie expenditure was ${String.format("%.1f", multiplier)}× your usual level."
+                        "Calorie expenditure was ${String.format(Locale.US, "%.1f", multiplier)}× your usual level."
                     } else {
                         "Calorie expenditure was ${diff} kcal higher (${percent.toInt()}% above baseline)."
                     }
