@@ -22,7 +22,7 @@ import retrofit2.HttpException
 
 // Retrofit API service for backend
 interface RealStressApiService {
-    @POST("/stress_analysis")
+    @POST("stress_analysis")
     suspend fun calculateStress(@Body request: StressRequest): StressResponse
 }
 

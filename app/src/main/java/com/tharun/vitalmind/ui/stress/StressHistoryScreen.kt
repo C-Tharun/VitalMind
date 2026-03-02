@@ -2,6 +2,7 @@ package com.tharun.vitalmind.ui.stress
 
 import androidx.compose.foundation.clickable // Added missing import
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -59,7 +60,10 @@ fun StressHistoryScreen(viewModel: StressHistoryViewModel, navController: NavCon
     Scaffold(
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {

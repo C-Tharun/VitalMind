@@ -4,6 +4,7 @@ package com.tharun.vitalmind.ui
 
 import android.util.Log
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -116,6 +117,7 @@ fun VitalMindAIScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
@@ -124,22 +126,33 @@ fun VitalMindAIScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "VitalMind AI",
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
                     )
-                    Spacer(modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "VitalMind AI",
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Your health assistant",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = {
                         aiViewModel.clearHistory()
                         aiViewModel.clearUserMessage()
                         showSuggestions = true
                     }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Default.Refresh, contentDescription = "Clear chat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -167,25 +180,44 @@ fun VitalMindAIScreen(
                         .fillMaxWidth()
                         .padding(8.dp)
                 ) {
-                    if (showSuggestions) {
+                    if (showSuggestions && chatHistory.isEmpty()) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Try asking:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.height(8.dp))
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Try asking:",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
                                 suggestions.forEach { q ->
-                                    OutlinedButton(
+                                    FilledTonalButton(
                                         onClick = {
                                             aiViewModel.setUserMessage(q)
                                             showSuggestions = false
                                         },
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        shape = RoundedCornerShape(12.dp)
                                     ) {
-                                        Text(q, textAlign = TextAlign.Start)
+                                        Text(q, textAlign = TextAlign.Start, modifier = Modifier.fillMaxWidth())
                                     }
                                 }
                             }
@@ -195,27 +227,42 @@ fun VitalMindAIScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
+                            .padding(horizontal = 8.dp),
                         state = listState,
-                        contentPadding = PaddingValues(vertical = 8.dp)
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(chatHistory) { message ->
                             val isUser = message.role == "user"
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
+                                    .padding(horizontal = 4.dp),
                                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                             ) {
                                 Surface(
-                                    color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(24.dp),
-                                    tonalElevation = 2.dp
+                                    color = if (isUser) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    shape = RoundedCornerShape(
+                                        topStart = 20.dp,
+                                        topEnd = 20.dp,
+                                        bottomStart = if (isUser) 20.dp else 4.dp,
+                                        bottomEnd = if (isUser) 4.dp else 20.dp
+                                    ),
+                                    shadowElevation = if (isUser) 2.dp else 0.dp,
+                                    modifier = Modifier.widthIn(max = 280.dp)
                                 ) {
                                     Text(
                                         text = message.content,
-                                        modifier = Modifier.padding(18.dp, 12.dp),
-                                        color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(16.dp, 12.dp),
+                                        color = if (isUser) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -223,55 +270,69 @@ fun VitalMindAIScreen(
                         }
                     }
                     // Input area above navigation bar, inside chat container
-                    Column(
+                    Surface(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 0.dp, start = 0.dp, end = 0.dp)
+                            .fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 8.dp,
+                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                                .fillMaxWidth()
+                                .padding(12.dp)
                         ) {
-                            OutlinedTextField(
-                                value = userMessage,
-                                onValueChange = { aiViewModel.setUserMessage(it) },
-                                modifier = Modifier.weight(1f),
-                                placeholder = { Text("Type your message...") },
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    if (userMessage.isNotBlank()) {
-                                        aiViewModel.addUserMessage(userMessage)
-                                        aiViewModel.setUserMessage("")
-                                        showSuggestions = false
-                                        coroutineScope.launch {
-                                            val client = HttpClient(CIO) {
-                                                install(ContentNegotiation) {
-                                                    json(Json { ignoreUnknownKeys = true })
-                                                }
-                                            }
-                                            val response = getGroqAIResponse(client, getPromptMessages())
-                                            val aiReply = response?.choices?.firstOrNull()?.message?.content ?: "Sorry, I couldn't get a response from the AI."
-                                            aiViewModel.addAIMessage(aiReply)
-                                            client.close()
-                                        }
-                                    }
-                                },
-                                enabled = userMessage.isNotBlank()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Send")
+                                OutlinedTextField(
+                                    value = userMessage,
+                                    onValueChange = { aiViewModel.setUserMessage(it) },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = { Text("Ask about your health...") },
+                                    shape = RoundedCornerShape(24.dp),
+                                    maxLines = 3
+                                )
+                                FilledIconButton(
+                                    onClick = {
+                                        if (userMessage.isNotBlank()) {
+                                            aiViewModel.addUserMessage(userMessage)
+                                            aiViewModel.setUserMessage("")
+                                            showSuggestions = false
+                                            coroutineScope.launch {
+                                                val client = HttpClient(CIO) {
+                                                    install(ContentNegotiation) {
+                                                        json(Json { ignoreUnknownKeys = true })
+                                                    }
+                                                }
+                                                val response = getGroqAIResponse(client, getPromptMessages())
+                                                val aiReply = response?.choices?.firstOrNull()?.message?.content ?: "Sorry, I couldn't get a response from the AI."
+                                                aiViewModel.addAIMessage(aiReply)
+                                                client.close()
+                                            }
+                                        }
+                                    },
+                                    enabled = userMessage.isNotBlank(),
+                                    modifier = Modifier.size(56.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Send",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "AI responses are AI-generated and for informational purposes only",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
                         }
-                        Text(
-                            "AI assistant is currently in prototype mode.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                            textAlign = TextAlign.Center
-                        )
                     }
                 }
             }
