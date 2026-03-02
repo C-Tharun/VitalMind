@@ -46,10 +46,13 @@ class StressRepository(
     }
     private val realApi by lazy { retrofit.create(RealStressApiService::class.java) }
 
-    suspend fun calculateStressScore(): StressResponse = withContext(Dispatchers.IO) {
+    suspend fun calculateStressScore(latitude: Double? = null, longitude: Double? = null): StressResponse = withContext(Dispatchers.IO) {
         try {
             Log.d("StressRepository", "=== Starting Stress Analysis ===")
             Log.d("StressRepository", "User ID: $userId")
+            if (latitude != null && longitude != null) {
+                Log.d("StressRepository", "📍 Location: lat=$latitude, lng=$longitude")
+            }
 
             // Get all health data for the user
             val healthDataList = healthDataRepository.getHealthData(userId).first()
@@ -163,9 +166,12 @@ class StressRepository(
                 stress_status = response.stress_status,
                 stress_stability = response.stress_stability,
                 mood = response.mood,
-                request_json = Gson().toJson(request)
+                request_json = Gson().toJson(request),
+                latitude = latitude,
+                longitude = longitude
             )
             stressScoreHistoryDao.insert(history)
+            Log.d("StressRepository", "💾 Saved stress score with location: lat=$latitude, lng=$longitude")
             response
         } catch (e: SocketTimeoutException) {
             Log.e("StressRepository", "Timeout while calculating stress score: ${e.message}", e)

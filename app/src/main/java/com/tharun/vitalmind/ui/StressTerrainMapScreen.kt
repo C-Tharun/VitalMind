@@ -1,6 +1,5 @@
 package com.tharun.vitalmind.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,14 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
-import android.util.Log
 
 /**
  * Full-screen Compose screen for displaying the Stress Terrain Map.
@@ -107,7 +104,7 @@ fun StressTerrainMapScreen(
                 ) {
                     // Add markers for stress zones
                     val visibleClusters = if (state.showStressZones) state.stressClusters else state.calmingClusters
-                    for ((index, cluster) in visibleClusters.withIndex()) {
+                    for (cluster in visibleClusters) {
                         val markerPosition = LatLng(cluster.latitude, cluster.longitude)
                         val markerState = rememberMarkerState(position = markerPosition)
 

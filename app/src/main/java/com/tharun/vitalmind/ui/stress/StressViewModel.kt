@@ -19,11 +19,11 @@ class StressViewModel(private val repository: StressRepository) : ViewModel() {
     private val _uiState = MutableStateFlow<StressUiState>(StressUiState.Idle)
     val uiState: StateFlow<StressUiState> = _uiState
 
-    fun calculateStress() {
+    fun calculateStress(latitude: Double? = null, longitude: Double? = null) {
         _uiState.value = StressUiState.Loading
         viewModelScope.launch {
             try {
-                val response = repository.calculateStressScore()
+                val response = repository.calculateStressScore(latitude, longitude)
                 _uiState.value = StressUiState.Success(response)
             } catch (e: Exception) {
                 _uiState.value = StressUiState.Error(e.message ?: "Unknown error")

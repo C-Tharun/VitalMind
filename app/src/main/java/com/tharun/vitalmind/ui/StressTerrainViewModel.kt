@@ -25,8 +25,10 @@ data class StressTerrainState(
  */
 class StressTerrainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val healthDataDao = AppDatabase.getDatabase(application).healthDataDao()
-    private val stressTerrainRepository = StressTerrainRepository(healthDataDao)
+    private val database = AppDatabase.getDatabase(application)
+    private val healthDataDao = database.healthDataDao()
+    private val stressScoreHistoryDao = database.stressScoreHistoryDao()
+    private val stressTerrainRepository = StressTerrainRepository(healthDataDao, stressScoreHistoryDao)
 
     private val _state = MutableStateFlow(StressTerrainState())
     val state: StateFlow<StressTerrainState> = _state.asStateFlow()
