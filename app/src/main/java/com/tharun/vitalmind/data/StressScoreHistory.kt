@@ -13,6 +13,8 @@ data class StressScoreHistory(
     val stress_status: String,
     val stress_stability: String,
     val mood: String,
-    val request_json: String // Store the full request for traceability
+    val request_json: String, // Store the full request for traceability
+    val latitude: Double? = null, // GPS latitude when stress was calculated
+    val longitude: Double? = null // GPS longitude when stress was calculated
 )
 

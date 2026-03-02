@@ -2,6 +2,7 @@ package com.tharun.vitalmind
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
@@ -1152,6 +1153,46 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
     }
     val stressUiState by stressViewModel.uiState.collectAsState()
 
+    // Location permission for stress terrain map
+    var userLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, get location
+            try {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                if (androidx.core.app.ActivityCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                    androidx.core.app.ActivityCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    val location = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                        ?: locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+
+                    location?.let {
+                        userLocation = Pair(it.latitude, it.longitude)
+                        // Calculate stress with location
+                        stressViewModel.calculateStress(it.latitude, it.longitude)
+                    } ?: run {
+                        // No location available, calculate without it
+                        stressViewModel.calculateStress()
+                    }
+                }
+            } catch (e: Exception) {
+                // Error getting location, calculate without it
+                stressViewModel.calculateStress()
+            }
+        } else {
+            // Permission denied, calculate without location
+            stressViewModel.calculateStress()
+        }
+    }
+
     // --- Health Deviation Feature ---
     val baselineTrainingPreferences = remember {
         com.tharun.vitalmind.data.BaselineTrainingPreferences(context)
@@ -1315,7 +1356,36 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                 // --- Stress Score Card ---
                 StressScoreCard(
                     uiState = stressUiState,
-                    onCalculate = { stressViewModel.calculateStress() }
+                    onCalculate = {
+                        // Request location permission first
+                        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                context,
+                                android.Manifest.permission.ACCESS_FINE_LOCATION
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                            androidx.core.content.ContextCompat.checkSelfPermission(
+                                context,
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            // Permission already granted, get location directly
+                            try {
+                                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                                val location = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+                                    ?: locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+
+                                location?.let {
+                                    stressViewModel.calculateStress(it.latitude, it.longitude)
+                                } ?: run {
+                                    stressViewModel.calculateStress()
+                                }
+                            } catch (e: Exception) {
+                                stressViewModel.calculateStress()
+                            }
+                        } else {
+                            // Request permission
+                            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
+                    }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
