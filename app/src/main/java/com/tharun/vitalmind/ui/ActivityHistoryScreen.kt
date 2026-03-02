@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,7 @@ fun ActivityHistoryScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp

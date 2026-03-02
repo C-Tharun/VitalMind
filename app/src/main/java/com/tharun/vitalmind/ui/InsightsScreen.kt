@@ -1,11 +1,13 @@
 package com.tharun.vitalmind.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hotel
@@ -13,6 +15,13 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,11 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import com.tharun.vitalmind.ui.MetricType
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +45,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavController
@@ -56,19 +67,19 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
         viewModel.fetchWeatherIfNeeded()
         viewModel.computeBaselineInsights()
     }
-    // Prepare context when weather or baseline changes (but don't auto-generate recommendation)
+    // Prepare context when weather or baseline changes
     LaunchedEffect(weather, baselineInsights) {
         viewModel.prepareRecommendationContext()
     }
 
     val coroutineScope = rememberCoroutineScope()
-    val isLoading = aiRecommendation == null
 
     Scaffold(
         topBar = {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
@@ -77,246 +88,340 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Insights",
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
     ) { padding ->
-        Column(
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
         ) {
-            Text(
-                text = "AI-powered insights (prototype)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.End)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Your Health vs Your Normal",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            LazyColumn(state = listState,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                items(baselineInsights.size) { idx ->
-                    val insight = baselineInsights[idx]
-                    val icon = when (insight.metric) {
-                        MetricType.STEPS -> Icons.Filled.DirectionsWalk
-                        MetricType.SLEEP -> Icons.Filled.Hotel
-                        MetricType.CALORIES -> Icons.Filled.LocalFireDepartment
-                        else -> Icons.Filled.Info
-                    }
-                    val deviationMsg = when {
-                        insight.status == "Consistent" -> "Consistent with your usual ${insight.metricName.lowercase()}"
-                        insight.deviationPercent < 0 -> "${kotlin.math.abs(insight.deviationPercent).toInt()}% below your usual ${insight.metricName.lowercase()}"
-                        insight.deviationPercent > 0 -> "${insight.deviationPercent.toInt()}% above your usual ${insight.metricName.lowercase()}"
-                        else -> "Consistent with your usual ${insight.metricName.lowercase()}"
-                    }
-                    InsightCardWithExplain(
-                        icon = icon,
-                        title = insight.metricName,
-                        message = deviationMsg,
-                        caption = "Compared against your 7-day personal baseline",
-                        aiExplanation = aiExplanations[idx],
-                        aiExpanded = aiExpanded[idx] == true,
-                        onExplain = {
-                            val prompt = "Explain in simple, non-medical language why a ${insight.deviationPercent.toInt()}% ${if (insight.deviationPercent < 0) "drop" else "increase"} in daily ${insight.metricName.lowercase()} compared to personal average may matter. Baseline: ${insight.baseline.toInt()}, Today: ${insight.todayValue.toInt()}"
-                            android.util.Log.d("VitalMind", "prompt sent to ai: $prompt")
-                            viewModel.requestAIExplanation(idx, prompt)
-                            aiExpanded[idx] = true
-                        },
-                        onExpandToggle = { aiExpanded[idx] = !(aiExpanded[idx] ?: false) },
-                        showAiIcon = true // Show AI icon for cards with AI explanation
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "AI-generated explanation (prototype)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.align(Alignment.End)
-                    )
-                }
-                // Stress Terrain Map section
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "🗺️ Stress Terrain Map",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Visualize your physiological stress patterns across locations.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                            Text(
-                                text = "Uses historical heart rate data to identify stress zones and calming locations. No real-time tracking.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 16.dp)
-                            )
-                            Button(
-                                onClick = {
-                                    navController?.navigate("stress_terrain_map")
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(
-                                    Icons.Filled.Info,
-                                    contentDescription = "View Map",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+            // Header Card
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                    )
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("View Map")
+                            )
+                            .padding(20.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.TrendingUp,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        "Health Analysis",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "AI-powered insights from your data",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                // Smart AI Recommendations section as the last item in the LazyColumn
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "\uD83E\uDD14 Smart AI Recommendations",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
+            }
+
+            // Insights Section
+            item {
+                SectionHeader(title = "Your Health vs Your Normal", icon = Icons.Default.TrendingUp)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Insight Cards
+            items(baselineInsights.size) { idx ->
+                val insight = baselineInsights[idx]
+                val icon = when (insight.metric) {
+                    MetricType.STEPS -> Icons.Filled.DirectionsWalk
+                    MetricType.SLEEP -> Icons.Filled.Hotel
+                    MetricType.CALORIES -> Icons.Filled.LocalFireDepartment
+                    else -> Icons.Filled.Info
+                }
+                val deviationMsg = when {
+                    insight.status == "Consistent" -> "Consistent with your usual ${insight.metricName.lowercase()}"
+                    insight.deviationPercent < 0 -> "${kotlin.math.abs(insight.deviationPercent).toInt()}% below your usual ${insight.metricName.lowercase()}"
+                    insight.deviationPercent > 0 -> "${insight.deviationPercent.toInt()}% above your usual ${insight.metricName.lowercase()}"
+                    else -> "Consistent with your usual ${insight.metricName.lowercase()}"
+                }
+                ModernInsightCard(
+                    icon = icon,
+                    title = insight.metricName,
+                    message = deviationMsg,
+                    caption = "Compared against your 7-day personal baseline",
+                    deviationPercent = insight.deviationPercent,
+                    aiExplanation = aiExplanations[idx],
+                    aiExpanded = aiExpanded[idx] == true,
+                    onExplain = {
+                        val prompt = "Explain in simple, non-medical language why a ${insight.deviationPercent.toInt()}% ${if (insight.deviationPercent < 0) "drop" else "increase"} in daily ${insight.metricName.lowercase()} compared to personal average may matter. Baseline: ${insight.baseline.toInt()}, Today: ${insight.todayValue.toInt()}"
+                        viewModel.requestAIExplanation(idx, prompt)
+                        aiExpanded[idx] = true
+                    },
+                    onExpandToggle = { aiExpanded[idx] = !(aiExpanded[idx] ?: false) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Stress Terrain Map Section
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+                SectionHeader(title = "Stress Terrain Map", icon = Icons.Default.Map)
+                Spacer(modifier = Modifier.height(12.dp))
+                StressTerrainCard(navController)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // AI Recommendation Section
+            item {
+                SectionHeader(title = "AI Recommendations", icon = Icons.Default.SmartToy)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            item {
+                AIRecommendationCard(
+                    recommendation = aiRecommendation,
+                    onGenerate = {
+                        hasRequestedRecommendation = true
+                        coroutineScope.launch {
+                            viewModel.generateAIRecommendation()
+                        }
+                    },
+                    isLoading = hasRequestedRecommendation && aiRecommendation == null
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+fun ModernInsightCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    message: String,
+    caption: String,
+    deviationPercent: Float,
+    aiExplanation: String?,
+    aiExpanded: Boolean,
+    onExplain: () -> Unit,
+    onExpandToggle: () -> Unit
+) {
+    val statusIcon = when {
+        kotlin.math.abs(deviationPercent) < 10 -> Icons.Default.CheckCircle
+        deviationPercent > 0 -> Icons.Default.TrendingUp
+        else -> Icons.Default.TrendingDown
+    }
+    val statusColor = when {
+        kotlin.math.abs(deviationPercent) < 10 -> Color(0xFF4CAF50)
+        kotlin.math.abs(deviationPercent) < 25 -> Color(0xFFFF9800)
+        else -> Color(0xFFF44336)
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            color = statusColor.copy(alpha = 0.1f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(28.dp)
                     )
-                    Card(
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            if (!hasRequestedRecommendation && aiRecommendation == null) {
-                                // Show button to request recommendation
-                                Button(
-                                    onClick = {
-                                        hasRequestedRecommendation = true
-                                        coroutineScope.launch {
-                                            viewModel.generateAIRecommendation()
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.SmartToy,
-                                        contentDescription = "AI",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Click here for AI recommendations", style = MaterialTheme.typography.labelLarge)
-                                }
-                            } else {
-                                // Show recommendation with refresh button
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Filled.SmartToy,
-                                        contentDescription = "AI",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = aiRecommendation ?: "Loading recommendation...",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    // Refresh icon
-                                    IconButton(onClick = {
-                                        coroutineScope.launch {
-                                            viewModel.generateAIRecommendation()
-                                        }
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Refresh Recommendation",
-                                            tint = if (isLoading) MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-                                }
-                                if (isLoading) {
-                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            // Weather info widget
-                            val w = weather
-                            if (w != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(w.location.name, style = MaterialTheme.typography.labelLarge)
-                                            Text(w.current.condition.text, style = MaterialTheme.typography.bodySmall)
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text("${w.current.temp_c}°C", style = MaterialTheme.typography.titleMedium)
-                                            w.current.airQuality?.usEpaIndex?.let {
-                                                val aqiLabel = when (it) {
-                                                    1, 2 -> "Good"
-                                                    3 -> "Moderate"
-                                                    4, 5 -> "Unhealthy"
-                                                    6 -> "Hazardous"
-                                                    else -> "Unknown"
-                                                }
-                                                Text("AQI: $aqiLabel", style = MaterialTheme.typography.bodySmall)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            statusIcon,
+                            contentDescription = null,
+                            tint = statusColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Caption
+            Text(
+                caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+
+            // AI Explanation Section
+            if (aiExplanation == null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onExplain,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.SmartToy,
+                        contentDescription = "AI",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ask AI to Explain")
+                }
+            } else {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onExpandToggle() },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Filled.SmartToy,
+                                    Icons.Default.SmartToy,
                                     contentDescription = "AI",
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(16.dp)
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "AI-generated recommendation (prototype)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    "AI Explanation",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Icon(
+                                if (aiExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        AnimatedVisibility(visible = aiExpanded) {
+                            Column {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    aiExplanation,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -328,99 +433,209 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
 }
 
 @Composable
-fun InsightCardWithExplain(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    message: String,
-    caption: String,
-    aiExplanation: String?,
-    aiExpanded: Boolean,
-    onExplain: () -> Unit,
-    onExpandToggle: () -> Unit,
-    showAiIcon: Boolean = false
+fun StressTerrainCard(navController: NavController?) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.tertiaryContainer,
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Map,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Stress Terrain Map",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Visualize stress patterns by location",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Uses historical heart rate data to identify stress zones and calming locations. No real-time tracking.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { navController?.navigate("stress_terrain_map") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Map,
+                        contentDescription = "View Map",
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("View Stress Map")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AIRecommendationCard(
+    recommendation: String?,
+    onGenerate: () -> Unit,
+    isLoading: Boolean
 ) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
                 )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(title, style = MaterialTheme.typography.titleMedium)
-                        if (showAiIcon) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                Icons.Filled.SmartToy,
-                                contentDescription = "AI",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(message, style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(caption, style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontSize = 12.sp)
-                }
-            }
-            // Move Explain button to its own row for visibility
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(
-                    onClick = onExplain
-                ) {
-                    Icon(
-                        Icons.Filled.SmartToy,
-                        contentDescription = "AI",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Explain")
-                }
-            }
-            if (aiExplanation != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(onClick = onExpandToggle) {
-                    Icon(
-                        Icons.Filled.SmartToy,
-                        contentDescription = "AI",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (aiExpanded) "Hide explanation" else "Show explanation")
-                }
-                AnimatedVisibility(visible = aiExpanded) {
-                    Row(verticalAlignment = Alignment.Top) {
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.secondaryContainer,
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            Icons.Filled.SmartToy,
-                            contentDescription = "AI",
-                            tint = MaterialTheme.colorScheme.primary,
+                            Icons.Default.SmartToy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            "Personalized Recommendations",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "AI-generated health advice",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (recommendation != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            recommendation,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = onGenerate,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Regenerate",
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            aiExplanation,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generate New Recommendation")
+                    }
+                } else {
+                    Button(
+                        onClick = onGenerate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Generating...")
+                        } else {
+                            Icon(
+                                Icons.Default.SmartToy,
+                                contentDescription = "Generate",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Generate Recommendation")
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Recommendations are AI-generated and should not replace medical advice",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
