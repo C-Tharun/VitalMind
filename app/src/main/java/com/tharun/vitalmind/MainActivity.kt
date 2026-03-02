@@ -13,17 +13,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
@@ -79,7 +74,6 @@ import com.tharun.vitalmind.ui.VitalMindAIScreen
 import com.tharun.vitalmind.ui.StressTerrainViewModel
 import com.tharun.vitalmind.ui.StressTerrainMapScreen
 import com.tharun.vitalmind.ui.theme.*
-import java.util.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
 import com.tharun.vitalmind.ui.stress.StressScoreCard
@@ -396,14 +390,12 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     // Create a LazyListState for each tab (for scroll tracking)
     val homeListState = rememberLazyListState()
     val insightsListState = rememberLazyListState()
-    val aiListState = rememberLazyListState() // If AI page is not scrollable, this will remain unused
+    val aiListState = rememberLazyListState()
     val profileListState = rememberLazyListState()
 
-    // Track scroll direction and threshold for all tabs
-    var isScrollingDown by remember { mutableStateOf(false) }
-    var lastIndex by remember { mutableStateOf(0) }
-    var lastOffset by remember { mutableStateOf(0) }
-    val scrollThreshold = 12 // dp offset threshold to avoid flicker
+    // Track scroll progress for smooth animation (0f = expanded, 1f = shrunk)
+    var scrollProgress by remember { mutableStateOf(0f) }
+    var lastScrollOffset by remember { mutableStateOf(0) }
 
     // Pick the correct listState for the current tab
     val currentListState = when (selectedTab) {
@@ -414,18 +406,17 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
         else -> homeListState
     }
 
-    // Always animate shrink/expand based on scroll direction for all tabs
+    // Smoothly animate based on scroll amount
     LaunchedEffect(selectedTab, currentListState.firstVisibleItemIndex, currentListState.firstVisibleItemScrollOffset) {
-        val index = currentListState.firstVisibleItemIndex
-        val offset = currentListState.firstVisibleItemScrollOffset
-        val delta = (index - lastIndex) * 1000 + (offset - lastOffset)
-        if (delta > scrollThreshold) {
-            isScrollingDown = true
-        } else if (delta < -scrollThreshold) {
-            isScrollingDown = false
-        }
-        lastIndex = index
-        lastOffset = offset
+        val currentOffset = currentListState.firstVisibleItemIndex * 1000 + currentListState.firstVisibleItemScrollOffset
+        val scrollDelta = currentOffset - lastScrollOffset
+
+        // Gradually adjust progress based on scroll amount
+        // Positive delta = scrolling down, negative = scrolling up
+        val progressChange = (scrollDelta / 500f).coerceIn(-0.1f, 0.1f)
+        scrollProgress = (scrollProgress + progressChange).coerceIn(0f, 1f)
+
+        lastScrollOffset = currentOffset
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -442,111 +433,115 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
             BottomBlurredNavBar(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it },
-                shrink = isScrollingDown
+                scrollProgress = scrollProgress
             )
         }
     }
 }
 
 @Composable
-fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, shrink: Boolean = false) {
-    // Animate height, padding, and width with smoother transitions
-    val animationSpec = spring<androidx.compose.ui.unit.Dp>(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessLow
-    )
-    val navBarHeight by animateDpAsState(
-        targetValue = if (shrink) 40.dp else 64.dp,
-        animationSpec = animationSpec,
-        label = "navBarHeight"
-    )
-    val navBarPadding by animateDpAsState(
-        targetValue = if (shrink) 8.dp else 32.dp,
-        animationSpec = animationSpec,
-        label = "navBarPadding"
-    )
-    val navBarWidth by animateDpAsState(
-        targetValue = if (shrink) 220.dp else 0.dp,
-        animationSpec = animationSpec,
-        label = "navBarWidth"
-    ) // 0.dp means fillMaxWidth
+fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, scrollProgress: Float = 0f) {
+    // Smoothly interpolate values based on scroll progress (0f = expanded, 1f = shrunk)
+    // Use lerp (linear interpolation) for smooth transitions
+    val navBarHeight = androidx.compose.ui.unit.lerp(70.dp, 56.dp, scrollProgress)
+    val navBarPadding = androidx.compose.ui.unit.lerp(24.dp, 12.dp, scrollProgress)
+    val navBarWidth = androidx.compose.ui.unit.lerp(0.dp, 240.dp, scrollProgress)
+    val cornerRadius = androidx.compose.ui.unit.lerp(32.dp, 28.dp, scrollProgress)
+    val iconPadding = androidx.compose.ui.unit.lerp(0.dp, 10.dp, scrollProgress)
+
+    // Determine if we should show labels based on progress threshold
+    val showLabels = scrollProgress < 0.5f
+
     Box(
         modifier = Modifier
             .then(
-                if (shrink) Modifier.width(navBarWidth) else Modifier.fillMaxWidth()
+                if (scrollProgress > 0.3f) Modifier.width(navBarWidth) else Modifier.fillMaxWidth()
             )
             .padding(bottom = navBarPadding, start = navBarPadding, end = navBarPadding)
-            .clip(RoundedCornerShape(if (shrink) 20.dp else 32.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(
-                brush = Brush.horizontalGradient(
-                    listOf(
-                        Color(0xFFF8F8FF).copy(alpha = 0.85f),
-                        Color(0xFFE0E0E0).copy(alpha = 0.85f)
-                    )
-                ),
-                shape = RoundedCornerShape(if (shrink) 20.dp else 32.dp)
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(cornerRadius)
             )
             .height(navBarHeight)
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = if (shrink) Arrangement.Center else Arrangement.SpaceEvenly,
+            horizontalArrangement = if (scrollProgress > 0.3f) Arrangement.Center else Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val iconPadding = if (shrink) 12.dp else 0.dp
             NavBarItem(
+                modifier = Modifier.padding(horizontal = iconPadding),
                 icon = Icons.Default.Home,
                 label = "Home",
                 selected = selectedTab == 0,
                 onClick = { onTabSelected(0) },
-                showLabel = !shrink,
-                modifier = Modifier.padding(horizontal = iconPadding)
+                showLabel = showLabels
             )
             NavBarItem(
+                modifier = Modifier.padding(horizontal = iconPadding),
                 icon = Icons.Default.Insights,
                 label = "Insights",
                 selected = selectedTab == 1,
                 onClick = { onTabSelected(1) },
-                showLabel = !shrink,
-                modifier = Modifier.padding(horizontal = iconPadding)
+                showLabel = showLabels
             )
             NavBarItem(
+                modifier = Modifier.padding(horizontal = iconPadding),
                 icon = Icons.AutoMirrored.Filled.Chat,
-                label = "VitalMind AI",
+                label = "AI",
                 selected = selectedTab == 2,
                 onClick = { onTabSelected(2) },
-                showLabel = !shrink,
-                modifier = Modifier.padding(horizontal = iconPadding)
+                showLabel = showLabels
             )
             NavBarItem(
+                modifier = Modifier.padding(horizontal = iconPadding),
                 icon = Icons.Default.Person,
                 label = "Profile",
                 selected = selectedTab == 3,
                 onClick = { onTabSelected(3) },
-                showLabel = !shrink,
-                modifier = Modifier.padding(horizontal = iconPadding)
+                showLabel = showLabels
             )
         }
     }
 }
 
 @Composable
-fun NavBarItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, showLabel: Boolean = true, modifier: Modifier = Modifier) {
+fun NavBarItem(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    showLabel: Boolean = true
+) {
+    val iconColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "iconColor"
+    )
+    val textColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "textColor"
+    )
+
     Column(
-        modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = modifier.clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             icon,
             contentDescription = label,
-            tint = if (selected) MaterialTheme.colorScheme.primary else Color.Black,
-            modifier = Modifier.size(if (showLabel) 28.dp else 24.dp)
+            tint = iconColor,
+            modifier = Modifier.size(if (showLabel) 26.dp else 24.dp)
         )
         AnimatedVisibility(visible = showLabel) {
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selected) MaterialTheme.colorScheme.primary else Color.Black
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = textColor
             )
         }
     }
@@ -679,26 +674,29 @@ fun MultiMetricHeartRings(
         var distanceInput by remember { mutableStateOf(distanceGoal.toInt().toString()) }
         AlertDialog(
             onDismissRequest = { showGoalDialog = false },
-            title = { Text("Set Daily Goals") },
+            title = { Text("Set Daily Goals", fontWeight = FontWeight.Bold) },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = stepsInput,
                         onValueChange = { stepsInput = it.filter { c -> c.isDigit() } },
                         label = { Text("Steps Goal") },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = kcalInput,
                         onValueChange = { kcalInput = it.filter { c -> c.isDigit() } },
-                        label = { Text("Kcal Goal") },
-                        singleLine = true
+                        label = { Text("Calories Goal") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = distanceInput,
                         onValueChange = { distanceInput = it.filter { c -> c.isDigit() || c == '.' } },
                         label = { Text("Distance Goal (km)") },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
@@ -711,7 +709,7 @@ fun MultiMetricHeartRings(
                         onGoalsChange(s, k, d)
                         showGoalDialog = false
                     }
-                }) { Text("Set") }
+                }) { Text("Set Goals") }
             },
             dismissButton = {
                 TextButton(onClick = { showGoalDialog = false }) { Text("Cancel") }
@@ -726,76 +724,146 @@ fun MultiMetricHeartRings(
     val ringValues = listOf(steps, kcal, distance)
     val ringGoals = listOf(stepsGoal, kcalGoal, distanceGoal)
     val ringUnits = listOf("steps", "kcal", "km")
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
-            .clickable { showGoalDialog = true }
-            .padding(8.dp), // Add padding to the card
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            .clickable { showGoalDialog = true },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val width = size.width
-                    val height = size.height
-                    // Calculate the max stroke width and spacing
-                    val baseStroke = 32f
-                    val gap = 8f
-                    val strokes = listOf(baseStroke, baseStroke - 10f, baseStroke - 20f)
-                    // Calculate scale for each ring so that the outer edge of each ring is spaced by 'gap'
-                    fun scaleForRing(ringIndex: Int): Float {
-                        val outer = baseStroke / 2 + ringIndex * (gap + 10f)
-                        val maxDim = width.coerceAtMost(height)
-                        return (maxDim - 2 * outer) / maxDim
-                    }
-                    for (i in 0..2) {
-                        val scale = scaleForRing(i)
-                        val stroke = strokes[i]
-                        // Draw background
-                        val bgPath = heartPath(width, height, scale)
-                        drawPath(bgPath, color = Color.DarkGray.copy(alpha = 0.3f), style = Stroke(width = stroke))
-                        // Draw progress
-                        if (ringProgress[i] > 0f) {
-                            val path = heartPath(width, height, scale)
-                            val pathMeasure = androidx.compose.ui.graphics.PathMeasure()
-                            pathMeasure.setPath(path, false)
-                            val length = pathMeasure.length
-                            val progressPath = androidx.compose.ui.graphics.Path()
-                            pathMeasure.getSegment(0f, length * ringProgress[i], progressPath, true)
-                            drawPath(progressPath, color = ringColors[i], style = Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
-                        }
-                    }
-                }
-                Icon(
-                    Icons.Default.Favorite,
-                    contentDescription = "Daily Goal",
-                    tint = ActivityRingRed,
-                    modifier = Modifier.size(40.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(24.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Daily Goal", style = MaterialTheme.typography.titleLarge)
-                for (i in 0..2) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
                     Text(
-                        text = "${ringValues[i].toInt()}/${ringGoals[i].toInt()} ${ringUnits[i]}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = ringColors[i]
+                        "Activity Goals",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Track your daily progress",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = "Tap to set goals",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                IconButton(onClick = { showGoalDialog = true }) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Set Goals",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // Heart visualization
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val width = size.width
+                        val height = size.height
+                        val baseStroke = 28f
+                        val gap = 8f
+                        val strokes = listOf(baseStroke, baseStroke - 8f, baseStroke - 16f)
+
+                        fun scaleForRing(ringIndex: Int): Float {
+                            val outer = baseStroke / 2 + ringIndex * (gap + 8f)
+                            val maxDim = width.coerceAtMost(height)
+                            return (maxDim - 2 * outer) / maxDim
+                        }
+                        for (i in 0..2) {
+                            val scale = scaleForRing(i)
+                            val stroke = strokes[i]
+                            val bgPath = heartPath(width, height, scale)
+                            drawPath(bgPath, color = Color.LightGray.copy(alpha = 0.2f), style = Stroke(width = stroke))
+                            if (ringProgress[i] > 0f) {
+                                val path = heartPath(width, height, scale)
+                                val pathMeasure = androidx.compose.ui.graphics.PathMeasure()
+                                pathMeasure.setPath(path, false)
+                                val length = pathMeasure.length
+                                val progressPath = androidx.compose.ui.graphics.Path()
+                                pathMeasure.getSegment(0f, length * ringProgress[i], progressPath, true)
+                                drawPath(progressPath, color = ringColors[i], style = Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                            }
+                        }
+                    }
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = "Activity",
+                        tint = ActivityRingRed,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+
+                // Progress indicators
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    for (i in 0..2) {
+                        GoalProgressItem(
+                            color = ringColors[i],
+                            label = ringUnits[i],
+                            current = ringValues[i].toInt(),
+                            goal = ringGoals[i].toInt(),
+                            progress = ringProgress[i]
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun GoalProgressItem(color: Color, label: String, current: Int, goal: Int, progress: Float) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(color, shape = androidx.compose.foundation.shape.CircleShape)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    label.replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                "$current/$goal",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        LinearProgressIndicator(
+            progress = progress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = color,
+            trackColor = color.copy(alpha = 0.2f)
+        )
     }
 }
 
@@ -875,20 +943,82 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
             healthDeviationViewModel.clearExportMessage()
         }
     }
-    // ...existing code...
+
+    // Remember chart producers to prevent recreation on scroll
+    val stepsChartProducer = remember(state.weeklySteps) {
+        ChartEntryModelProducer(state.weeklySteps.mapIndexed { index, pair -> entryOf(index.toFloat(), pair.second) })
+    }
+    val caloriesChartProducer = remember(state.weeklyCalories) {
+        ChartEntryModelProducer(state.weeklyCalories.mapIndexed { index, pair -> entryOf(index.toFloat(), pair.second) })
+    }
+
     Scaffold(
         topBar = {
             ModernTopAppBar(title = "Home", showBackButton = false)
         }
     ) { padding ->
-        LazyColumn(state = listState, modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
+        ) {
             item {
-                Spacer(modifier = Modifier.height(8.dp))
+                // Welcome Section with gradient background
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Transparent
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)
+                                    )
+                                )
+                            )
+                            .padding(20.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "Welcome back,",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = state.userName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Let's check your health today",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                // Daily Goals Section
                 Text(
-                    text = "Welcome, ${state.userName}",
+                    text = "Daily Goals",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
                 )
                 MultiMetricHeartRings(
                     steps = steps,
@@ -904,25 +1034,55 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     }
                 )
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
+                // Health Insights Section
+                Text(
+                    text = "Health Insights",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
                 // --- Stress Score Card ---
                 StressScoreCard(
                     uiState = stressUiState,
                     onCalculate = { stressViewModel.calculateStress() }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { navController.navigate("stress_history") },
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("View Stress Score History", fontWeight = FontWeight.Bold)
-                        Text("See your previous stress scores", style = MaterialTheme.typography.bodySmall)
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("View Stress History", fontWeight = FontWeight.SemiBold)
+                                Text("Track your stress over time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 // --- Health Deviation Card ---
                 HealthDeviationCard(
                     uiState = healthDeviationUiState,
@@ -931,43 +1091,61 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     onExport = { healthDeviationViewModel.exportBaselineData(context) },
                     exportMessage = healthDeviationExportMessage
                 )
-                Spacer(modifier = Modifier.height(24.dp)) // Increased space to prevent overlap
-                // --- End Health Deviation Card ---
-                // --- End Stress Score Card ---
+                Spacer(modifier = Modifier.height(24.dp))
             }
+
             item {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.height(580.dp)
+                // Health Metrics Section
+                Text(
+                    text = "Health Metrics",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+
+            // Health metrics grid items (individually added for proper scrolling)
+            items(summaryMetrics.chunked(2)) { rowMetrics ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(summaryMetrics) { metric ->
-                        NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+                    rowMetrics.forEach { metric ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+                        }
+                    }
+                    // Add empty space if odd number of items in last row
+                    if (rowMetrics.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
+
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                SectionTitle(title = "Last Activity", icon = Icons.Default.History)
-                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            item {
+                // Recent Activity Section
+                SectionTitle(title = "Recent Activity", icon = Icons.Default.History)
+                Spacer(modifier = Modifier.height(12.dp))
                 LastActivityCard(activity = state.lastActivity, time = state.lastActivityTime) {
                     navController.navigate("activityHistory")
                 }
-            }
-            item {
                 Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
+                // Weekly Trends Section
                 SectionTitle(title = "Weekly Trends", icon = Icons.AutoMirrored.Filled.ShowChart)
+                Spacer(modifier = Modifier.height(12.dp))
+                WeeklyChartOptimized(chartProducer = stepsChartProducer, data = state.weeklySteps, title = "Steps")
+                Spacer(modifier = Modifier.height(12.dp))
+                WeeklyChartOptimized(chartProducer = caloriesChartProducer, data = state.weeklyCalories, title = "Calories")
                 Spacer(modifier = Modifier.height(16.dp))
-            }
-            item {
-                WeeklyChart(state.weeklySteps, "Steps")
-            }
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            item {
-                WeeklyChart(state.weeklyCalories, "Calories")
             }
         }
     }
@@ -975,10 +1153,33 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
 
 @Composable
 fun SectionTitle(title: String, icon: ImageVector) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -1103,66 +1304,80 @@ fun ActivityRing(
 fun NewHealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
     Card(
         modifier = Modifier
-            .aspectRatio(1f)
+            .fillMaxWidth()
+            .height(150.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Background gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                metric.color.copy(alpha = 0.05f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
+                // Header with icon
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = metric.icon,
+                        contentDescription = null,
+                        tint = metric.color,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "details",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Metric name
                 Text(
                     metric.type.name.split('_').joinToString(" ") { it.lowercase().replaceFirstChar { char -> char.titlecase() } },
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
                 )
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "details", tint = metric.color)
-            }
 
-            Column {
-                Text("Today", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(verticalAlignment = Alignment.Bottom) {
+                // Value section
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = metric.value,
-                        style = MaterialTheme.typography.headlineLarge,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = metric.color
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                     if (metric.unit.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = metric.unit,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = metric.color.copy(alpha = 0.8f),
-                            modifier = Modifier.padding(bottom = 8.dp) // Aligns with baseline of big text
-                        )
-                    }
-                }
-            }
-
-            // Placeholder for the small chart
-            Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    val heights = remember { List(15) { Random().nextFloat() } }
-                    heights.forEach {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(it)
-                                .background(metric.color.copy(alpha = 0.5f), shape = RoundedCornerShape(2.dp))
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = metric.color.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
                 }
@@ -1174,18 +1389,58 @@ fun NewHealthSummaryCard(metric: HealthMetric, onClick: () -> Unit) {
 @Composable
 fun LastActivityCard(activity: String, time: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.History, contentDescription = "Last Activity", modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(activity, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.DirectionsRun,
+                        contentDescription = "Activity",
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        activity,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        time,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }
@@ -1224,3 +1479,84 @@ fun WeeklyChart(data: List<Pair<String, Float>>, title: String) {
         }
     }
 }
+
+@Composable
+fun WeeklyChartOptimized(chartProducer: ChartEntryModelProducer, data: List<Pair<String, Float>>, title: String) {
+    val axisValueFormatter = remember(data) {
+        AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
+            data.getOrNull(value.toInt())?.first ?: ""
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.ShowChart,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            if (data.isNotEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    ProvideChartStyle(rememberChartStyle()) {
+                        Chart(
+                            chart = columnChart(
+                                columns = listOf(
+                                    LineComponent(
+                                        color = MaterialTheme.colorScheme.primary.toArgb(),
+                                        thicknessDp = 16f,
+                                        shape = Shapes.roundedCornerShape(topLeftPercent = 50, topRightPercent = 50)
+                                    )
+                                )
+                            ),
+                            chartModelProducer = chartProducer,
+                            startAxis = rememberStartAxis(),
+                            bottomAxis = rememberBottomAxis(valueFormatter = axisValueFormatter)
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.DataUsage,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "No data available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
