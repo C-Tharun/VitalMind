@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -396,6 +397,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
     // Track scroll progress for smooth animation (0f = expanded, 1f = shrunk)
     var scrollProgress by remember { mutableStateOf(0f) }
     var lastScrollOffset by remember { mutableStateOf(0) }
+    var isScrollingDown by remember { mutableStateOf(false) }
 
     // Pick the correct listState for the current tab
     val currentListState = when (selectedTab) {
@@ -406,17 +408,33 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
         else -> homeListState
     }
 
-    // Smoothly animate based on scroll amount
+    // Smoothly animate based on scroll amount with better responsiveness
     LaunchedEffect(selectedTab, currentListState.firstVisibleItemIndex, currentListState.firstVisibleItemScrollOffset) {
         val currentOffset = currentListState.firstVisibleItemIndex * 1000 + currentListState.firstVisibleItemScrollOffset
         val scrollDelta = currentOffset - lastScrollOffset
 
-        // Gradually adjust progress based on scroll amount
-        // Positive delta = scrolling down, negative = scrolling up
-        val progressChange = (scrollDelta / 500f).coerceIn(-0.1f, 0.1f)
-        scrollProgress = (scrollProgress + progressChange).coerceIn(0f, 1f)
+        // Determine scroll direction
+        if (scrollDelta > 5) {
+            isScrollingDown = true
+        } else if (scrollDelta < -5) {
+            isScrollingDown = false
+        }
 
+        // Gradually adjust progress based on scroll amount
+        // Faster response for better UX
+        val progressChange = when {
+            isScrollingDown -> (scrollDelta / 300f).coerceIn(0f, 0.15f)
+            else -> -(kotlin.math.abs(scrollDelta) / 300f).coerceIn(0f, 0.15f)
+        }
+
+        scrollProgress = (scrollProgress + progressChange).coerceIn(0f, 1f)
         lastScrollOffset = currentOffset
+    }
+
+    // Reset scroll progress when changing tabs
+    LaunchedEffect(selectedTab) {
+        scrollProgress = 0f
+        lastScrollOffset = 0
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -443,35 +461,34 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
 fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, scrollProgress: Float = 0f) {
     // Smoothly interpolate values based on scroll progress (0f = expanded, 1f = shrunk)
     // Use lerp (linear interpolation) for smooth transitions
-    val navBarHeight = androidx.compose.ui.unit.lerp(70.dp, 56.dp, scrollProgress)
-    val navBarPadding = androidx.compose.ui.unit.lerp(24.dp, 12.dp, scrollProgress)
-    val navBarWidth = androidx.compose.ui.unit.lerp(0.dp, 240.dp, scrollProgress)
+    val navBarHeight = androidx.compose.ui.unit.lerp(70.dp, 60.dp, scrollProgress)
+    val navBarPadding = androidx.compose.ui.unit.lerp(24.dp, 16.dp, scrollProgress)
+
     val cornerRadius = androidx.compose.ui.unit.lerp(32.dp, 28.dp, scrollProgress)
-    val iconPadding = androidx.compose.ui.unit.lerp(0.dp, 10.dp, scrollProgress)
 
     // Determine if we should show labels based on progress threshold
-    val showLabels = scrollProgress < 0.5f
+    val showLabels = scrollProgress < 0.3f
 
     Box(
         modifier = Modifier
-            .then(
-                if (scrollProgress > 0.3f) Modifier.width(navBarWidth) else Modifier.fillMaxWidth()
-            )
+            .fillMaxWidth()
             .padding(bottom = navBarPadding, start = navBarPadding, end = navBarPadding)
             .clip(RoundedCornerShape(cornerRadius))
             .background(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
                 shape = RoundedCornerShape(cornerRadius)
             )
-            .height(navBarHeight)
+            .height(navBarHeight),
+        contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = if (scrollProgress > 0.3f) Arrangement.Center else Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // All icons always visible
             NavBarItem(
-                modifier = Modifier.padding(horizontal = iconPadding),
+                modifier = Modifier,
                 icon = Icons.Default.Home,
                 label = "Home",
                 selected = selectedTab == 0,
@@ -479,7 +496,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, scrollPr
                 showLabel = showLabels
             )
             NavBarItem(
-                modifier = Modifier.padding(horizontal = iconPadding),
+                modifier = Modifier,
                 icon = Icons.Default.Insights,
                 label = "Insights",
                 selected = selectedTab == 1,
@@ -487,7 +504,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, scrollPr
                 showLabel = showLabels
             )
             NavBarItem(
-                modifier = Modifier.padding(horizontal = iconPadding),
+                modifier = Modifier,
                 icon = Icons.AutoMirrored.Filled.Chat,
                 label = "AI",
                 selected = selectedTab == 2,
@@ -495,7 +512,7 @@ fun BottomBlurredNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit, scrollPr
                 showLabel = showLabels
             )
             NavBarItem(
-                modifier = Modifier.padding(horizontal = iconPadding),
+                modifier = Modifier,
                 icon = Icons.Default.Person,
                 label = "Profile",
                 selected = selectedTab == 3,
@@ -593,18 +610,168 @@ fun ModernTopAppBar(title: String, showBackButton: Boolean = true, onBackClick: 
 fun ProfileScreen(state: DashboardState) {
     Scaffold(
         topBar = {
-            ModernTopAppBar(title = "Profile", showBackButton = false)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(64.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Profile",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        LazyColumn(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
+        ) {
+            // Profile Header Card
             item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Profile: ${state.userName}",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                                    )
+                                )
+                            )
+                            .padding(20.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary,
+                                        androidx.compose.foundation.shape.CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = state.userName.take(1).uppercase(),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    state.userName,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "VitalMind User",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Health Stats Section
+            item {
+                SectionTitle(title = "Health Statistics", icon = Icons.AutoMirrored.Filled.ShowChart)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Quick Stats Cards
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProfileStatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.AutoMirrored.Filled.DirectionsWalk,
+                        label = "Steps",
+                        value = state.steps,
+                        color = StepCountPurple
+                    )
+                    ProfileStatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.Favorite,
+                        label = "Heart Rate",
+                        value = state.heartRate,
+                        unit = "bpm",
+                        color = ActivityRingRed
+                    )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProfileStatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.LocalFireDepartment,
+                        label = "Calories",
+                        value = state.calories,
+                        unit = "kcal",
+                        color = LightGreen
+                    )
+                    ProfileStatCard(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Default.Map,
+                        label = "Distance",
+                        value = state.distance,
+                        unit = "km",
+                        color = StepDistanceCyan
+                    )
+                }
+            }
+
+            // Detailed Info Section
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                SectionTitle(title = "Detailed Information", icon = Icons.Default.Info)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -612,30 +779,83 @@ fun ProfileScreen(state: DashboardState) {
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        ProfileDataRow("Steps", state.steps)
-                        ProfileDataRow("Calories", state.calories)
-                        ProfileDataRow("Distance", state.distance)
-                        ProfileDataRow("Heart Rate", state.heartRate)
                         ProfileDataRow("Sleep Duration", state.sleepDuration)
                         ProfileDataRow("Last Activity", state.lastActivity)
                         ProfileDataRow("Weight", state.weight)
                         ProfileDataRow("Floors Climbed", state.floorsClimbed)
-                        // Remove last divider
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Move Minutes", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(state.moveMinutes, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                        }
+                        ProfileDataRowLast("Move Minutes", state.moveMinutes)
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
-            // Optionally, add more profile-specific cards or charts here
+        }
+    }
+}
+
+@Composable
+fun ProfileStatCard(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    label: String,
+    value: String,
+    unit: String = "",
+    color: Color
+) {
+    Card(
+        modifier = modifier.height(120.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(28.dp)
+                )
+                Column {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            value,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = color
+                        )
+                        if (unit.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                unit,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = color.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -654,6 +874,20 @@ fun ProfileDataRow(label: String, value: String) {
             Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
         }
         HorizontalDivider(modifier = Modifier.fillMaxWidth(), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    }
+}
+
+@Composable
+fun ProfileDataRowLast(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -1037,6 +1271,40 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
             }
 
             item {
+                // Health Metrics Section
+                Text(
+                    text = "Health Metrics",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+
+            // Health metrics grid items (individually added for proper scrolling)
+            items(summaryMetrics.chunked(2)) { rowMetrics ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowMetrics.forEach { metric ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
+                        }
+                    }
+                    // Add empty space if odd number of items in last row
+                    if (rowMetrics.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
                 // Health Insights Section
                 Text(
                     text = "Health Insights",
@@ -1091,40 +1359,6 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     onExport = { healthDeviationViewModel.exportBaselineData(context) },
                     exportMessage = healthDeviationExportMessage
                 )
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            item {
-                // Health Metrics Section
-                Text(
-                    text = "Health Metrics",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-            }
-
-            // Health metrics grid items (individually added for proper scrolling)
-            items(summaryMetrics.chunked(2)) { rowMetrics ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    rowMetrics.forEach { metric ->
-                        Box(modifier = Modifier.weight(1f)) {
-                            NewHealthSummaryCard(metric) { navController.navigate("history/${metric.type.name}") }
-                        }
-                    }
-                    // Add empty space if odd number of items in last row
-                    if (rowMetrics.size == 1) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-
-            item {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
