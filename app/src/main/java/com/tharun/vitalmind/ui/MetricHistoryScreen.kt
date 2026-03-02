@@ -3,6 +3,7 @@ package com.tharun.vitalmind.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -65,6 +66,7 @@ fun MetricHistoryScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp

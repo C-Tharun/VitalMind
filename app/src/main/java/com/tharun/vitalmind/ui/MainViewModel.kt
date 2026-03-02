@@ -41,15 +41,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<DashboardState> = _userId.flatMapLatest { userId ->
         if (userId != null) {
             repository.getHealthData(userId).map { data ->
-                // Get today's start and end time
+                // Get today's start and end time with strict boundaries
                 val cal = Calendar.getInstance()
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
                 val todayStart = cal.timeInMillis
-                val now = System.currentTimeMillis()
-                val todayData = data.filter { it.timestamp in todayStart..now }
+
+                // Set end to current time or end of day, whichever is earlier
+                cal.set(Calendar.HOUR_OF_DAY, 23)
+                cal.set(Calendar.MINUTE, 59)
+                cal.set(Calendar.SECOND, 59)
+                cal.set(Calendar.MILLISECOND, 999)
+                val todayEnd = minOf(System.currentTimeMillis(), cal.timeInMillis)
+
+                // Strictly filter to only include data from today (excluding boundary overlaps)
+                val todayData = data.filter { it.timestamp >= todayStart && it.timestamp <= todayEnd }
 
                 val totalSteps = todayData.sumOf { it.steps ?: 0 }
                 val totalCalories = todayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
