@@ -1,5 +1,6 @@
 package com.tharun.vitalmind.ui.stress
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable // Added missing import
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -7,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -215,16 +217,27 @@ fun StressHistoryScreen(viewModel: StressHistoryViewModel, navController: NavCon
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Text(
-                                    "Confidence Trend",
+                                    "Stability Trend",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(bottom = 12.dp)
                                 )
 
+                                // Create chart entries based on stability
                                 val chartEntries = remember(selectedDayEntries) {
                                     selectedDayEntries.mapIndexed { index, item ->
-                                        entryOf(index.toFloat(), item.stress_score)
+                                        // Convert stability to numeric value (Stable=3, Variable=2, Unstable=1)
+                                        val stabilityValue = when {
+                                            item.stress_stability.contains("stable", ignoreCase = true) -> 3f
+                                            item.stress_stability.contains("variable", ignoreCase = true) -> 2f
+                                            else -> 1f
+                                        }
+                                        entryOf(index.toFloat(), stabilityValue)
                                     }
+                                }
+
+                                val chartProducer = remember(chartEntries) {
+                                    ChartEntryModelProducer(chartEntries)
                                 }
 
                                 ProvideChartStyle(rememberChartStyle()) {
@@ -232,19 +245,31 @@ fun StressHistoryScreen(viewModel: StressHistoryViewModel, navController: NavCon
                                         chart = columnChart(
                                             columns = listOf(
                                                 LineComponent(
-                                                    color = Color(0xFF4361EE).value.toInt(),
+                                                    color = Color(0xFF4CAF50).value.toInt(), // Green for stable
                                                     thicknessDp = 12f,
                                                     shape = Shapes.roundedCornerShape(topRightPercent = 40, topLeftPercent = 40)
                                                 )
                                             )
                                         ),
-                                        chartModelProducer = ChartEntryModelProducer(chartEntries),
+                                        chartModelProducer = chartProducer,
                                         startAxis = rememberStartAxis(),
                                         bottomAxis = rememberBottomAxis(),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(180.dp)
                                     )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Legend
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    LegendItem("Stable", Color(0xFF4CAF50))
+                                    LegendItem("Variable", Color(0xFFFFA726))
+                                    LegendItem("Unstable", Color(0xFFF44336))
                                 }
                             }
                         }
@@ -428,5 +453,22 @@ fun StressHistoryCard(item: StressScoreHistory) {
                 )
             }
         }
+    }
+}
+
+@Composable
+fun LegendItem(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(color, shape = androidx.compose.foundation.shape.CircleShape)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

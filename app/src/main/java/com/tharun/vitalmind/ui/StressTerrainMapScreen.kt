@@ -81,15 +81,16 @@ fun StressTerrainMapScreen(
         position = CameraPosition.fromLatLngZoom(mapCenter, zoomLevel)
     }
 
-    // Update camera when clusters change
+    // Update camera position when clusters change (after map is ready)
     LaunchedEffect(mapCenter, zoomLevel) {
-        cameraPositionState.animate(
-            update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
-                mapCenter,
-                zoomLevel
-            ),
-            durationMs = 1000
-        )
+        // Only update if we have actual clusters
+        if (state.stressClusters.isNotEmpty() || state.calmingClusters.isNotEmpty()) {
+            try {
+                cameraPositionState.position = CameraPosition.fromLatLngZoom(mapCenter, zoomLevel)
+            } catch (e: Exception) {
+                // Ignore if camera not ready yet
+            }
+        }
     }
 
     Scaffold(
