@@ -422,7 +422,7 @@ fun StressHistoryCard(item: StressScoreHistory) {
 
                 // Tertiary: Confidence Score (ML technical detail)
                 Text(
-                    text = "Confidence: ${String.format("%.1f", item.stress_score)}%",
+                    text = "Confidence: ${String.format(Locale.getDefault(), "%.1f", item.stress_score)}%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )

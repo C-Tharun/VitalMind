@@ -42,10 +42,54 @@ fun StressTerrainMapScreen(
     val state by viewModel.state.collectAsState()
     var showInfoDialog by remember { mutableStateOf(false) }
 
-    // Default map center (San Francisco)
-    val defaultCenter = LatLng(37.7749, -122.4194)
+    // Calculate map center from actual clusters
+    val mapCenter = remember(state.stressClusters, state.calmingClusters) {
+        val allClusters = state.stressClusters + state.calmingClusters
+        if (allClusters.isNotEmpty()) {
+            val avgLat = allClusters.map { it.latitude }.average()
+            val avgLng = allClusters.map { it.longitude }.average()
+            LatLng(avgLat, avgLng)
+        } else {
+            LatLng(37.7749, -122.4194) // Fallback to default
+        }
+    }
+
+    // Calculate zoom level to fit all markers
+    val zoomLevel = remember(state.stressClusters, state.calmingClusters) {
+        val allClusters = state.stressClusters + state.calmingClusters
+        if (allClusters.size > 1) {
+            // Calculate bounds and adjust zoom
+            val lats = allClusters.map { it.latitude }
+            val lngs = allClusters.map { it.longitude }
+            val latSpan = (lats.maxOrNull() ?: 0.0) - (lats.minOrNull() ?: 0.0)
+            val lngSpan = (lngs.maxOrNull() ?: 0.0) - (lngs.minOrNull() ?: 0.0)
+            val maxSpan = maxOf(latSpan, lngSpan)
+
+            when {
+                maxSpan < 0.01 -> 15f  // Very close markers
+                maxSpan < 0.05 -> 13f  // Close markers
+                maxSpan < 0.1 -> 12f   // Medium spread
+                maxSpan < 0.5 -> 10f   // Wide spread
+                else -> 8f             // Very wide spread
+            }
+        } else {
+            14f // Single marker or default
+        }
+    }
+
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(defaultCenter, 12f)
+        position = CameraPosition.fromLatLngZoom(mapCenter, zoomLevel)
+    }
+
+    // Update camera when clusters change
+    LaunchedEffect(mapCenter, zoomLevel) {
+        cameraPositionState.animate(
+            update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
+                mapCenter,
+                zoomLevel
+            ),
+            durationMs = 1000
+        )
     }
 
     Scaffold(
@@ -129,7 +173,8 @@ fun StressTerrainMapScreen(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(32.dp)
                     ) {
                         if (state.isLoading) {
                             CircularProgressIndicator(
@@ -137,13 +182,67 @@ fun StressTerrainMapScreen(
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("Loading stress terrain data...", style = MaterialTheme.typography.bodyLarge)
-                        } else {
                             Text(
-                                "No stress data available yet.\nCollect more health data to generate the map.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(32.dp)
+                                "Loading stress terrain data...",
+                                style = MaterialTheme.typography.bodyLarge
                             )
+                        } else {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "No stress data available yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "To see your stress terrain map:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "1. Go to Home page",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "2. Click 'Calculate Stress' button",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "3. Allow location permission",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "4. Repeat daily to build your map",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { viewModel.refreshData() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("Refresh Data")
+                            }
                         }
                     }
                 }

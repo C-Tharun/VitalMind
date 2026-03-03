@@ -3,6 +3,7 @@ package com.tharun.vitalmind.data
 import android.util.Log
 import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import java.util.*
 import kotlin.math.*
@@ -251,67 +252,87 @@ class StressTerrainRepository(
             cal.add(Calendar.DAY_OF_YEAR, -dayCount)
             val startTime = cal.timeInMillis
 
+            Log.d("StressTerrainRepository", "=== STRESS TERRAIN MAP DEBUG ===")
+            Log.d("StressTerrainRepository", "User ID: $userId")
             Log.d("StressTerrainRepository", "Fetching stress terrain data for last $dayCount days")
 
-            // First, try to get stress score history with location data
-            stressScoreHistoryDao.getHistoryForUser(userId).collect { stressHistory ->
-                val recentHistory = stressHistory.filter {
-                    it.timestamp >= startTime &&
-                    it.timestamp <= endTime &&
-                    it.latitude != null &&
-                    it.longitude != null
-                }
-
-                if (recentHistory.isNotEmpty()) {
-                    Log.d("StressTerrainRepository", "Found ${recentHistory.size} stress scores with location data")
-
-                    // Convert stress score history to stress clusters
-                    val stressClusters = convertStressHistoryToClusters(recentHistory, isStressed = true)
-                    val calmingClusters = convertStressHistoryToClusters(recentHistory, isStressed = false)
-
-                    emit(Pair(stressClusters, calmingClusters))
-                    return@collect
-                }
-
-                // Fallback: Try health data with location (original method)
-                Log.d("StressTerrainRepository", "No stress history with location found, trying health data...")
-                healthDataDao.getDataForRange(userId, startTime, endTime).collect { healthData ->
-                    val locatedData = healthData.filter {
-                        it.latitude != null &&
-                        it.longitude != null &&
-                        it.heartRate != null &&
-                        it.heartRate!! > 0
-                    }
-
-                    if (locatedData.isEmpty()) {
-                        Log.d("StressTerrainRepository", "No health data with location information found")
-                        emit(Pair(emptyList(), emptyList()))
-                        return@collect
-                    }
-
-                    Log.d("StressTerrainRepository", "Processing ${locatedData.size} health data points with location")
-
-                    // Calculate baselines
-                    val baselineHeartRates = calculateBaselineHeartRates(locatedData)
-                    Log.d("StressTerrainRepository", "Calculated ${baselineHeartRates.size} baseline heart rate groups")
-
-                    // Detect stress events
-                    val stressEvents = detectStressEvents(locatedData, baselineHeartRates)
-                    Log.d("StressTerrainRepository", "Detected ${stressEvents.size} stress events")
-
-                    // Identify calming zones
-                    val calmingEvents = identifyCalmingZones(locatedData, baselineHeartRates)
-                    Log.d("StressTerrainRepository", "Identified ${calmingEvents.size} calming events")
-
-                    // Cluster spatial data
-                    val stressClusters = clusterStressEvents(stressEvents, isCalming = false)
-                    val calmingClusters = clusterStressEvents(calmingEvents, isCalming = true)
-
-                    Log.d("StressTerrainRepository", "Created ${stressClusters.size} stress clusters and ${calmingClusters.size} calming clusters")
-
-                    emit(Pair(stressClusters, calmingClusters))
-                }
+            // First, get all stress score history - use first() to get current value without blocking
+            val stressHistory = try {
+                stressScoreHistoryDao.getHistoryForUser(userId).first()
+            } catch (e: NoSuchElementException) {
+                emptyList()
             }
+
+            Log.d("StressTerrainRepository", "Total stress history entries: ${stressHistory.size}")
+
+            // Filter to recent entries with location
+            val recentHistory = stressHistory.filter {
+                it.timestamp >= startTime &&
+                it.timestamp <= endTime &&
+                it.latitude != null &&
+                it.longitude != null
+            }
+
+            Log.d("StressTerrainRepository", "Stress history with location in date range: ${recentHistory.size}")
+            recentHistory.forEach { entry ->
+                Log.d("StressTerrainRepository", "  - Score: ${entry.stress_score}, Lat: ${entry.latitude}, Lng: ${entry.longitude}, Time: ${entry.timestamp}")
+            }
+
+            if (recentHistory.isNotEmpty()) {
+                Log.d("StressTerrainRepository", "Found ${recentHistory.size} stress scores with location data")
+
+                // Convert stress score history to stress clusters
+                val stressClusters = convertStressHistoryToClusters(recentHistory, isStressed = true)
+                val calmingClusters = convertStressHistoryToClusters(recentHistory, isStressed = false)
+
+                Log.d("StressTerrainRepository", "Created ${stressClusters.size} stress clusters and ${calmingClusters.size} calming clusters")
+
+                emit(Pair(stressClusters, calmingClusters))
+                return@flow
+            }
+
+            // Fallback: Try health data with location (original method)
+            Log.d("StressTerrainRepository", "No stress history with location found, trying health data...")
+            val healthData = try {
+                healthDataDao.getDataForRange(userId, startTime, endTime).first()
+            } catch (e: NoSuchElementException) {
+                emptyList()
+            }
+
+            val locatedData = healthData.filter {
+                it.latitude != null &&
+                it.longitude != null &&
+                it.heartRate != null &&
+                it.heartRate!! > 0
+            }
+
+            if (locatedData.isEmpty()) {
+                Log.d("StressTerrainRepository", "No health data with location information found")
+                emit(Pair(emptyList(), emptyList()))
+                return@flow
+            }
+
+            Log.d("StressTerrainRepository", "Processing ${locatedData.size} health data points with location")
+
+            // Calculate baselines
+            val baselineHeartRates = calculateBaselineHeartRates(locatedData)
+            Log.d("StressTerrainRepository", "Calculated ${baselineHeartRates.size} baseline heart rate groups")
+
+            // Detect stress events
+            val stressEvents = detectStressEvents(locatedData, baselineHeartRates)
+            Log.d("StressTerrainRepository", "Detected ${stressEvents.size} stress events")
+
+            // Identify calming zones
+            val calmingEvents = identifyCalmingZones(locatedData, baselineHeartRates)
+            Log.d("StressTerrainRepository", "Identified ${calmingEvents.size} calming events")
+
+            // Cluster spatial data
+            val stressClusters = clusterStressEvents(stressEvents, isCalming = false)
+            val calmingClusters = clusterStressEvents(calmingEvents, isCalming = true)
+
+            Log.d("StressTerrainRepository", "Created ${stressClusters.size} stress clusters and ${calmingClusters.size} calming clusters")
+
+            emit(Pair(stressClusters, calmingClusters))
         } catch (e: Exception) {
             Log.e("StressTerrainRepository", "Error getting stress terrain data", e)
             emit(Pair(emptyList(), emptyList()))
@@ -320,20 +341,34 @@ class StressTerrainRepository(
 
     /**
      * Converts StressScoreHistory entries with location to StressCluster objects
+     * Uses mood field (Relaxed/Alert/Stressed) instead of stress_score (which is just ML confidence)
      */
     private fun convertStressHistoryToClusters(
         history: List<StressScoreHistory>,
         isStressed: Boolean
     ): List<StressCluster> {
+        Log.d("StressTerrainRepository", "Converting ${history.size} history entries to clusters (isStressed=$isStressed)")
+
         val filteredHistory = if (isStressed) {
-            // High stress: scores >= 60
-            history.filter { it.stress_score >= 60f }
+            // Stressed mood = High stress zones (mood == "Stressed" or "Alert")
+            history.filter {
+                it.mood.equals("Stressed", ignoreCase = true) ||
+                it.mood.equals("Alert", ignoreCase = true)
+            }
         } else {
-            // Low stress (calming): scores < 40
-            history.filter { it.stress_score < 40f }
+            // Relaxed mood = Calming zones (mood == "Relaxed")
+            history.filter { it.mood.equals("Relaxed", ignoreCase = true) }
         }
 
-        if (filteredHistory.isEmpty()) return emptyList()
+        Log.d("StressTerrainRepository", "Filtered to ${filteredHistory.size} entries based on mood (isStressed=$isStressed)")
+        filteredHistory.forEach { entry ->
+            Log.d("StressTerrainRepository", "  - Mood: ${entry.mood}, Level: ${entry.stress_level}, Lat: ${entry.latitude}, Lng: ${entry.longitude}")
+        }
+
+        if (filteredHistory.isEmpty()) {
+            Log.d("StressTerrainRepository", "No ${if (isStressed) "stress" else "calming"} zones found")
+            return emptyList()
+        }
 
         // Group by location (grid-based clustering)
         val cellSize = GRID_CELL_SIZE_METERS / 111000.0 // Convert meters to degrees
@@ -348,17 +383,41 @@ class StressTerrainRepository(
             clusteredMap.computeIfAbsent(cellKey) { mutableListOf() }.add(entry)
         }
 
+        Log.d("StressTerrainRepository", "Grouped into ${clusteredMap.size} spatial clusters")
+
         // Create clusters
-        return clusteredMap.map { (_, entries) ->
+        val clusters = clusteredMap.map { (_, entries) ->
             val avgLat = entries.mapNotNull { it.latitude }.average()
             val avgLng = entries.mapNotNull { it.longitude }.average()
-            val avgScore = entries.map { it.stress_score }.average().toFloat()
-            val normalizedWeight = if (isStressed) {
-                // High stress: normalize from 60-100 to 0-1
-                ((avgScore - 60f) / 40f).coerceIn(0f, 1f)
+
+            // Calculate weight based on stress_level (0=Low, 1=Medium, 2=High)
+            // Convert stress_level strings to numeric values
+            val stressLevels = entries.mapNotNull { entry ->
+                when (entry.stress_level.lowercase()) {
+                    "low", "0" -> 0f
+                    "medium", "1" -> 1f
+                    "high", "2" -> 2f
+                    else -> when (entry.mood.lowercase()) {
+                        "relaxed" -> 0f
+                        "alert" -> 1f
+                        "stressed" -> 2f
+                        else -> null
+                    }
+                }
+            }
+
+            val avgLevel = if (stressLevels.isNotEmpty()) {
+                stressLevels.average().toFloat()
             } else {
-                // Calming: normalize from 0-40 to 1-0 (inverse)
-                (1f - (avgScore / 40f)).coerceIn(0f, 1f)
+                if (isStressed) 1.5f else 0f
+            }
+
+            val normalizedWeight = if (isStressed) {
+                // Stress zones: normalize 0-2 to 0-1 (0.5=Alert, 1.0=Stressed)
+                (avgLevel / 2f).coerceIn(0f, 1f)
+            } else {
+                // Calming zones: all relaxed entries get high weight (inverted for visibility)
+                1f - (avgLevel / 2f).coerceIn(0f, 1f)
             }
 
             StressCluster(
@@ -369,6 +428,13 @@ class StressTerrainRepository(
                 isCalmingZone = !isStressed
             )
         }.sortedByDescending { it.eventCount }
+
+        Log.d("StressTerrainRepository", "Created ${clusters.size} ${if (isStressed) "stress" else "calming"} clusters")
+        clusters.forEach { cluster ->
+            Log.d("StressTerrainRepository", "  - Cluster: Lat=${cluster.latitude}, Lng=${cluster.longitude}, Weight=${cluster.weight}, Events=${cluster.eventCount}")
+        }
+
+        return clusters
     }
 
     /**
