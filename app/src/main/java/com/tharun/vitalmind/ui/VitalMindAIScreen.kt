@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tharun.vitalmind.BuildConfig
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -118,41 +119,66 @@ fun VitalMindAIScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .height(64.dp),
+                    .height(80.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {
-                Row(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                )
+                            )
+                        )
                         .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "VitalMind AI",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Your health assistant",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = {
-                        aiViewModel.clearHistory()
-                        aiViewModel.clearUserMessage()
-                        showSuggestions = true
-                    }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Clear chat", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    androidx.compose.foundation.shape.CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "🤖",
+                                fontSize = 28.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "VitalMind AI",
+                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Your intelligent health companion",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = {
+                            aiViewModel.clearHistory()
+                            aiViewModel.clearUserMessage()
+                            showSuggestions = true
+                        }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Clear chat",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
@@ -162,7 +188,14 @@ fun VitalMindAIScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
+                    )
+                )
         ) {
             // Chat UI container with rounded corners and elevation
             Surface(
@@ -170,9 +203,10 @@ fun VitalMindAIScreen(
                     .align(Alignment.BottomCenter)
                     .padding(8.dp, 8.dp, 8.dp, 80.dp)
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 400.dp),
+                    .defaultMinSize(minHeight = 500.dp),
                 shape = RoundedCornerShape(32.dp),
-                tonalElevation = 6.dp,
+                tonalElevation = 8.dp,
+                shadowElevation = 4.dp,
                 color = MaterialTheme.colorScheme.surface
             ) {
                 Column(
@@ -184,28 +218,35 @@ fun VitalMindAIScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                                .padding(16.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
+                            Column(modifier = Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                                androidx.compose.foundation.shape.CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("💡", fontSize = 20.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         "Try asking:",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
                                 suggestions.forEach { q ->
                                     FilledTonalButton(
                                         onClick = {
@@ -215,9 +256,14 @@ fun VitalMindAIScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(vertical = 4.dp),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Text(q, textAlign = TextAlign.Start, modifier = Modifier.fillMaxWidth())
+                                        Text(
+                                            q,
+                                            textAlign = TextAlign.Start,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
                                     }
                                 }
                             }

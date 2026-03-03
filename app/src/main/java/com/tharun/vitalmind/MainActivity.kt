@@ -21,12 +21,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -351,7 +354,7 @@ class MainActivity : ComponentActivity() {
                         val stressHistoryViewModel = remember(state.userId) {
                             StressHistoryViewModel(stressRepo, state.userId)
                         }
-                        StressHistoryScreen(viewModel = stressHistoryViewModel)
+                        StressHistoryScreen(viewModel = stressHistoryViewModel, navController = navController)
                     }
                 }
             }
@@ -571,6 +574,7 @@ fun ModernTopAppBar(title: String, showBackButton: Boolean = true, onBackClick: 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .height(64.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 4.dp
@@ -1244,7 +1248,7 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(bottom = 20.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Color.Transparent
@@ -1257,31 +1261,69 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                             .background(
                                 brush = Brush.horizontalGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
                                     )
                                 )
                             )
-                            .padding(20.dp)
+                            .padding(24.dp)
                     ) {
                         Column {
-                            Text(
-                                text = "Welcome back,",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FavoriteBorder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Welcome back,",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = state.userName,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                             )
-                            Text(
-                                text = state.userName,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Let's check your health today",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Let's check your health progress today",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -1289,11 +1331,10 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
 
             item {
                 // Daily Goals Section
-                Text(
-                    text = "Daily Goals",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+                SectionHeader(
+                    icon = Icons.Default.Flag,
+                    title = "Daily Goals",
+                    subtitle = "Track your progress"
                 )
                 MultiMetricHeartRings(
                     steps = steps,
@@ -1308,16 +1349,15 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                         distanceGoal = d
                     }
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
             }
 
             item {
                 // Health Metrics Section
-                Text(
-                    text = "Health Metrics",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                SectionHeader(
+                    icon = Icons.Default.Dashboard,
+                    title = "Health Metrics",
+                    subtitle = "Your vital statistics"
                 )
             }
 
@@ -1342,16 +1382,15 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
             }
 
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
             }
 
             item {
                 // Health Insights Section
-                Text(
-                    text = "Health Insights",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                SectionHeader(
+                    icon = Icons.Default.Lightbulb,
+                    title = "Health Insights",
+                    subtitle = "AI-powered analysis"
                 )
                 // --- Stress Score Card ---
                 StressScoreCard(
@@ -1718,7 +1757,7 @@ fun LastActivityCard(activity: String, time: String, onClick: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.DirectionsRun,
+                        Icons.AutoMirrored.Filled.DirectionsRun,
                         contentDescription = "Activity",
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1864,3 +1903,48 @@ fun WeeklyChartOptimized(chartProducer: ChartEntryModelProducer, data: List<Pair
     }
 }
 
+@Composable
+fun SectionHeader(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}

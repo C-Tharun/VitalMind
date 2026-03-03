@@ -61,6 +61,39 @@ fun MetricHistoryScreen(
         viewModel.loadHistory(metricType, selectedDate)
     }
 
+    // Pre-calculate sleep data if needed
+    val sleepDataCalc = remember(metricType, historyData, selectedDate) {
+        if (metricType == MetricType.SLEEP) {
+            val cal = Calendar.getInstance()
+            cal.timeInMillis = selectedDate
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            val dayStart = cal.timeInMillis
+            cal.add(Calendar.DATE, 1)
+            val dayEnd = cal.timeInMillis
+
+            val selectedDateSleepData = historyData.filter { data ->
+                val sleepStart = data.timestamp
+                val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
+                sleepStart < dayEnd && sleepEnd > dayStart
+            }
+            val selectedTotalSleep: Int = if (selectedDateSleepData.isNotEmpty()) {
+                val minStart = selectedDateSleepData.minOf { it.timestamp }
+                var maxEnd = selectedDateSleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
+                if (maxEnd < minStart) {
+                    maxEnd += 24 * 60 * 60 * 1000
+                }
+                ((maxEnd - minStart) / 60000).toInt()
+            } else 0
+
+            Triple(dayStart, dayEnd, Pair(selectedDateSleepData, selectedTotalSleep))
+        } else {
+            null
+        }
+    }
+
     Scaffold(
         topBar = {
             Surface(
@@ -89,7 +122,7 @@ fun MetricHistoryScreen(
                         )
                     }
                     Text(
-                        text = "${metricType.name.lowercase().replaceFirstChar { it.uppercase() }} History",
+                        text = "${metricType.displayName} History",
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(vertical = 8.dp)
@@ -99,246 +132,451 @@ fun MetricHistoryScreen(
             }
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp)
         ) {
-            DateSelector(selectedDate = selectedDate, onDateSelected = { selectedDate = it })
-            Spacer(modifier = Modifier.height(16.dp))
+            // Date Selector
+            item {
+                DateSelector(selectedDate = selectedDate, onDateSelected = { selectedDate = it })
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             when (metricType) {
                 MetricType.HEART_RATE -> {
                     if (heartRateHistory.dailySummary == null && heartRateHistory.hourlyData.isEmpty() && heartRateHistory.rawData.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No heart rate data available for this period.")
+                        item {
+                            EmptyStateCard(
+                                emoji = "💓",
+                                title = "No heart rate data",
+                                subtitle = "Start tracking to see your heart rate history"
+                            )
                         }
                     } else {
-                        LazyColumn {
-                            item {
-                                heartRateHistory.dailySummary?.let { summary ->
-                                    DailyHeartRateSummary(summary)
-                                }
+                        item {
+                            heartRateHistory.dailySummary?.let { summary ->
+                                DailyHeartRateSummary(summary)
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
-                            item {
-                                if (heartRateHistory.hourlyData.isNotEmpty()) {
-                                    HourlyHeartRateChart(heartRateHistory.hourlyData)
-                                }
+                        }
+
+                        item {
+                            if (heartRateHistory.hourlyData.isNotEmpty()) {
+                                HourlyHeartRateChart(heartRateHistory.hourlyData)
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
-                            items(heartRateHistory.rawData) {
-                                data ->
-                                Row(modifier = Modifier
+                        }
+
+                        item {
+                            Text(
+                                "Readings (${heartRateHistory.rawData.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+
+                        items(heartRateHistory.rawData) { data ->
+                            Card(
+                                modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp)) {
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
                                         text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(data.timestamp)),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                     Text(
-                                        text = "${data.heartRate?.toInt()} bpm",
-                                        fontWeight = FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyLarge
+                                        text = "${data.heartRate?.toInt() ?: 0}",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF44336)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "bpm",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                HorizontalDivider()
                             }
                         }
                     }
                 }
+
                 MetricType.STEPS -> {
                     if (stepsHistory.totalSteps == 0 && stepsHistory.chartData.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No step data available for this period.")
+                        item {
+                            EmptyStateCard(
+                                emoji = "👟",
+                                title = "No step data",
+                                subtitle = "Start walking to track your steps"
+                            )
                         }
                     } else {
-                        LazyColumn {
-                            item {
-                                Text("Total Steps: ${stepsHistory.totalSteps}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                            item {
-                                if (stepsHistory.chartData.isNotEmpty()) {
-                                    StepsBarChart(stepsHistory.chartData)
+                        // Summary Card
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFF9C27B0).copy(alpha = 0.1f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(20.dp)) {
+                                    Text(
+                                        "Daily Summary",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text(
+                                            "${stepsHistory.totalSteps}",
+                                            fontSize = 40.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF9C27B0)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "steps",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        )
+                                    }
                                 }
                             }
-                            items(stepsHistory.listData) {
-                                data ->
-                                Row(modifier = Modifier
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        // Chart
+                        item {
+                            if (stepsHistory.chartData.isNotEmpty()) {
+                                StepsBarChart(stepsHistory.chartData)
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Section Header
+                        item {
+                            Text(
+                                "Hourly Breakdown (${stepsHistory.listData.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+
+                        // List Items
+                        items(stepsHistory.listData) { data ->
+                            Card(
+                                modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp)) {
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
                                         text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(data.timestamp)),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                     Text(
-                                        text = "${data.steps} steps",
-                                        fontWeight = FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyLarge
+                                        text = "${data.steps}",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF9C27B0)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "steps",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                HorizontalDivider()
                             }
                         }
                     }
                 }
-                MetricType.SLEEP -> {
-                    val cal = Calendar.getInstance()
-                    cal.timeInMillis = selectedDate
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    val dayStart = cal.timeInMillis
-                    cal.add(Calendar.DATE, 1)
-                    val dayEnd = cal.timeInMillis
 
-                    val selectedDateSleepData = historyData.filter { data ->
-                        val sleepStart = data.timestamp
-                        val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
-                        sleepStart < dayEnd && sleepEnd > dayStart
-                    }
-                    val selectedTotalSleep: Int = if (selectedDateSleepData.isNotEmpty()) {
-                        val minStart = selectedDateSleepData.minOf { it.timestamp }
-                        var maxEnd = selectedDateSleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
-                        if (maxEnd < minStart) {
-                            maxEnd += 24 * 60 * 60 * 1000 // handle crossing midnight
-                        }
-                        ((maxEnd - minStart) / 60000).toInt()
-                    } else 0
+                MetricType.SLEEP -> {
+                    val sleepInfo = sleepDataCalc ?: Triple(0L, 0L, Pair(emptyList(), 0))
+                    val dayStart = sleepInfo.first
+                    val dayEnd = sleepInfo.second
+                    val selectedDateSleepData = sleepInfo.third.first
+                    val selectedTotalSleep = sleepInfo.third.second
 
                     if (selectedTotalSleep == 0 && selectedDateSleepData.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No sleep data available for this period.")
+                        item {
+                            EmptyStateCard(
+                                emoji = "😴",
+                                title = "No sleep data",
+                                subtitle = "Track your sleep to see patterns"
+                            )
                         }
                     } else {
-                        LazyColumn {
-                            item {
-                                Text("Total Sleep: ${selectedTotalSleep / 60}h ${selectedTotalSleep % 60}m", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                            item {
-                                if (selectedDateSleepData.isNotEmpty()) {
-                                    SleepStagesChart(sleepData = selectedDateSleepData)
+                        // Summary Card
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(20.dp)) {
+                                    Text(
+                                        "Total Sleep",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text(
+                                            "${selectedTotalSleep / 60}h ${selectedTotalSleep % 60}m",
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF2196F3)
+                                        )
+                                    }
+
+                                    // Sleep Stage Duration Summary
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Text(
+                                        "Sleep Stages",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Calculate duration for each stage
+                                    val lightSleep = selectedDateSleepData.filter {
+                                        it.activityType.equals("Light sleep", ignoreCase = true)
+                                    }.sumOf { it.sleepDuration ?: 0L }
+
+                                    val deepSleep = selectedDateSleepData.filter {
+                                        it.activityType.equals("Deep sleep", ignoreCase = true)
+                                    }.sumOf { it.sleepDuration ?: 0L }
+
+                                    val remSleep = selectedDateSleepData.filter {
+                                        it.activityType.equals("REM sleep", ignoreCase = true)
+                                    }.sumOf { it.sleepDuration ?: 0L }
+
+                                    val awake = selectedDateSleepData.filter {
+                                        it.activityType.equals("Awake", ignoreCase = true)
+                                    }.sumOf { it.sleepDuration ?: 0L }
+
+                                    // Display stage durations
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (lightSleep > 0) {
+                                            SleepStageDuration("Light", lightSleep, Color(0xFF81D4FA))
+                                        }
+                                        if (deepSleep > 0) {
+                                            SleepStageDuration("Deep", deepSleep, Color(0xFF29B6F6))
+                                        }
+                                        if (remSleep > 0) {
+                                            SleepStageDuration("REM", remSleep, Color(0xFF039BE5))
+                                        }
+                                        if (awake > 0) {
+                                            SleepStageDuration("Awake", awake, Color(0xFFE0E0E0))
+                                        }
+                                    }
                                 }
                             }
-                            items(selectedDateSleepData) { data ->
-                                val sleepStart = data.timestamp
-                                val overlap = overlapMinutes(data, dayStart, dayEnd)
-                                Row(modifier = Modifier
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        // Chart
+                        item {
+                            if (selectedDateSleepData.isNotEmpty()) {
+                                SleepStagesChart(sleepData = selectedDateSleepData)
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        // Section Header
+                        item {
+                            Text(
+                                "Sessions (${selectedDateSleepData.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+
+                        // List Items
+                        items(selectedDateSleepData) { data ->
+                            val sleepStart = data.timestamp
+                            val overlap = overlapMinutes(data, dayStart, dayEnd)
+                            Card(
+                                modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp)) {
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
                                         text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(sleepStart)),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
                                     Text(
                                         text = "${overlap / 60}h ${overlap % 60}m",
-                                        fontWeight = FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyLarge
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2196F3)
                                     )
                                 }
-                                HorizontalDivider()
                             }
                         }
                     }
                 }
-                else -> {
+
+                MetricType.CALORIES, MetricType.DISTANCE -> {
                     if (historyData.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No history data available for this period.")
+                        item {
+                            val emoji = if (metricType == MetricType.CALORIES) "🔥" else "🗺️"
+                            val title = if (metricType == MetricType.CALORIES) "No calorie data" else "No distance data"
+                            EmptyStateCard(
+                                emoji = emoji,
+                                title = title,
+                                subtitle = "Start tracking to see your history"
+                            )
                         }
                     } else {
-                        // Add total distance display for distance metric
-                        if (metricType == MetricType.DISTANCE) {
-                            val totalDistance = historyData.sumOf { it.distance?.toDouble() ?: 0.0 }
-                            Text(
-                                "Total Distance: ${String.format(Locale.US, "%.2f", totalDistance)} km",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
+                        // Summary Card
+                        item {
+                            val totalValue = if (metricType == MetricType.CALORIES) {
+                                historyData.sumOf { (it.calories ?: 0f).toDouble() }
+                            } else {
+                                historyData.sumOf { (it.distance ?: 0f).toDouble() }
+                            }
+                            val color = if (metricType == MetricType.CALORIES) Color(0xFF4CAF50) else Color(0xFF00BCD4)
+                            val unit = if (metricType == MetricType.CALORIES) "kcal" else "km"
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = color.copy(alpha = 0.1f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(20.dp)) {
+                                    Text(
+                                        "Daily Total",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text(
+                                            String.format(Locale.US, "%.1f", totalValue),
+                                            fontSize = 40.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = color
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            unit,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Spacer(modifier = Modifier.height(16.dp))
                         }
-                        val chartModelProducer = ChartEntryModelProducer(historyData.mapIndexed { index, data ->
-                            val value = when(metricType) {
-                                MetricType.CALORIES -> data.calories ?: 0f
-                                MetricType.DISTANCE -> data.distance ?: 0f
-                                MetricType.SLEEP -> (data.sleepDuration?.toFloat() ?: 0f) / 60f // Show hours in chart
-                                else -> 0f
-                            }
-                            entryOf(index.toFloat(), value)
-                        })
 
-                        val bottomAxisValueFormatter = AxisValueFormatter<AxisPosition.Horizontal.Bottom> { value, _ ->
-                            try {
-                                val dataPoint = historyData[value.toInt()]
-                                val format = when(metricType) {
-                                    MetricType.SLEEP -> "d MMM"
-                                    else -> "h a"
-                                }
-                                SimpleDateFormat(format, Locale.getDefault()).format(Date(dataPoint.timestamp))
-                            } catch (_: IndexOutOfBoundsException) {
-                                ""
-                            }
+                        // Section Header
+                        item {
+                            Text(
+                                "Entries (${historyData.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
 
-                        ProvideChartStyle(rememberChartStyle()) {
-                            val primaryColor = MaterialTheme.colorScheme.primary
-                            Chart(
-                                chart = lineChart(
-                                    lines = listOf(
-                                        LineChart.LineSpec(
-                                            lineColor = primaryColor.toArgb(),
-                                            lineBackgroundShader = verticalGradient(
-                                                arrayOf(
-                                                    primaryColor.copy(alpha = 0.5f),
-                                                    primaryColor.copy(alpha = 0f)
-                                                )
-                                            )
-                                        )
-                                    )
-                                ),
-                                model = chartModelProducer.getModel()!!,
-                                startAxis = rememberStartAxis(),
-                                bottomAxis = rememberBottomAxis(valueFormatter = bottomAxisValueFormatter)
-                            )
-                        } // <-- Add missing closing braces for ProvideChartStyle and Column
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        LazyColumn {
-                            items(historyData) {
-                                data ->
-                                Row(modifier = Modifier
+                        // List Items
+                        items(historyData) { data ->
+                            val color = if (metricType == MetricType.CALORIES) Color(0xFF4CAF50) else Color(0xFF00BCD4)
+                            Card(
+                                modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp)) {
-                                    val format = when (metricType) {
-                                        MetricType.SLEEP -> "EEE, d MMM"
-                                        else -> "h:mm a"
-                                    }
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
-                                        text = SimpleDateFormat(format, Locale.getDefault()).format(Date(data.timestamp)),
+                                        text = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(data.timestamp)),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
-                                    val valueText = when(metricType) {
-                                        MetricType.CALORIES -> data.calories?.let { "$it kcal" }
-                                        MetricType.DISTANCE -> data.distance?.let { "${String.format(Locale.US, "%.2f", it)} km" }
-                                        MetricType.SLEEP -> data.sleepDuration?.let { "${it / 60}h ${it % 60}m" }
-                                        else -> ""
+                                    val value = if (metricType == MetricType.CALORIES) {
+                                        "${data.calories?.toInt() ?: 0}"
+                                    } else {
+                                        String.format(Locale.US, "%.2f", data.distance ?: 0f)
                                     }
-                                    Text(text = valueText ?: "", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        text = value,
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = color
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (metricType == MetricType.CALORIES) "kcal" else "km",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                HorizontalDivider()
                             }
                         }
+                    }
+                }
+
+                else -> {
+                    // Handle ACTIVITY, WEIGHT, FLOORS_CLIMBED, MOVE_MINUTES
+                    item {
+                        EmptyStateCard(
+                            emoji = "📊",
+                            title = "No data available",
+                            subtitle = "This metric is not yet supported"
+                        )
                     }
                 }
             }
@@ -579,3 +817,89 @@ fun SleepStageLegendItem(name: String, color: Color) {
         Text(text = name, fontSize = 12.sp)
     }
 }
+
+@Composable
+fun EmptyStateCard(
+    emoji: String,
+    title: String,
+    subtitle: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                emoji,
+                fontSize = 64.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun SleepStageDuration(name: String, durationMinutes: Long, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color, shape = androidx.compose.foundation.shape.CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            "${durationMinutes / 60}h ${durationMinutes % 60}m",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+    }
+}
+
+val MetricType.displayName: String
+    get() = when (this) {
+        MetricType.STEPS -> "Steps"
+        MetricType.HEART_RATE -> "Heart Rate"
+        MetricType.CALORIES -> "Calories"
+        MetricType.DISTANCE -> "Distance"
+        MetricType.SLEEP -> "Sleep"
+        MetricType.ACTIVITY -> "Activity"
+        MetricType.WEIGHT -> "Weight"
+        MetricType.FLOORS_CLIMBED -> "Floors Climbed"
+        MetricType.MOVE_MINUTES -> "Move Minutes"
+    }
+
