@@ -362,6 +362,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setUserIdAndName(userId: String, userName: String?) {
         _userId.value = userId
         _userName.value = userName?.split(" ")?.first() ?: "User"
+
+        // Save user ID to SharedPreferences for notification worker
+        val prefs = getApplication<Application>().getSharedPreferences("vitalmind_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("user_id", userId).apply()
+        Log.d("MainViewModel", "Saved user ID to SharedPreferences: $userId")
     }
 
     fun syncTodaySummary() {
