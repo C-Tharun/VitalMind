@@ -9,14 +9,14 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.ExpandLess
@@ -34,10 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import com.tharun.vitalmind.ui.MetricType
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
@@ -149,7 +149,7 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        Icons.Default.TrendingUp,
+                                        Icons.AutoMirrored.Filled.TrendingUp,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(24.dp)
@@ -177,7 +177,7 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
 
             // Insights Section
             item {
-                SectionHeader(title = "Your Health vs Your Normal", icon = Icons.Default.TrendingUp)
+                SectionHeader(title = "Your Health vs Your Normal", icon = Icons.AutoMirrored.Filled.TrendingUp)
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -185,7 +185,7 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
             items(baselineInsights.size) { idx ->
                 val insight = baselineInsights[idx]
                 val icon = when (insight.metric) {
-                    MetricType.STEPS -> Icons.Filled.DirectionsWalk
+                    MetricType.STEPS -> Icons.AutoMirrored.Filled.DirectionsWalk
                     MetricType.SLEEP -> Icons.Filled.Hotel
                     MetricType.CALORIES -> Icons.Filled.LocalFireDepartment
                     else -> Icons.Filled.Info
@@ -227,6 +227,21 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
             item {
                 SectionHeader(title = "AI Recommendations", icon = Icons.Default.SmartToy)
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Weather & Location Card
+            item {
+                val currentWeather = weather
+                val currentContext = recommendationContext
+                if (currentWeather != null && currentContext != null) {
+                    WeatherLocationCard(
+                        location = currentWeather.location.name,
+                        temperature = currentContext.temperatureC ?: 0f,
+                        weatherCondition = currentContext.weatherCondition ?: "Unknown",
+                        aqi = currentContext.aqi ?: "Unknown"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
             }
 
             item {
@@ -291,8 +306,8 @@ fun ModernInsightCard(
 ) {
     val statusIcon = when {
         kotlin.math.abs(deviationPercent) < 10 -> Icons.Default.CheckCircle
-        deviationPercent > 0 -> Icons.Default.TrendingUp
-        else -> Icons.Default.TrendingDown
+        deviationPercent > 0 -> Icons.AutoMirrored.Filled.TrendingUp
+        else -> Icons.AutoMirrored.Filled.TrendingDown
     }
     val statusColor = when {
         kotlin.math.abs(deviationPercent) < 10 -> Color(0xFF4CAF50)
@@ -638,5 +653,119 @@ fun AIRecommendationCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun WeatherLocationCard(
+    location: String,
+    temperature: Float,
+    weatherCondition: String,
+    aqi: String
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Weather Icon
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    getWeatherEmoji(weatherCondition),
+                    fontSize = 32.sp
+                )
+            }
+
+            // Weather Details
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.DirectionsWalk,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        location,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "${temperature.toInt()}°C",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        weatherCondition,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Air Quality
+                Surface(
+                    color = getAQIColor(aqi).copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "Air Quality: ${aqi.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = getAQIColor(aqi)
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun getWeatherEmoji(condition: String): String {
+    return when {
+        condition.contains("sunny", ignoreCase = true) -> "☀️"
+        condition.contains("clear", ignoreCase = true) -> "🌤️"
+        condition.contains("cloud", ignoreCase = true) -> "☁️"
+        condition.contains("rain", ignoreCase = true) -> "🌧️"
+        condition.contains("storm", ignoreCase = true) -> "⛈️"
+        condition.contains("snow", ignoreCase = true) -> "❄️"
+        condition.contains("fog", ignoreCase = true) -> "🌫️"
+        else -> "🌡️"
+    }
+}
+
+fun getAQIColor(aqi: String): Color {
+    return when (aqi.lowercase()) {
+        "good" -> Color(0xFF4CAF50)
+        "moderate" -> Color(0xFFFFA726)
+        "poor", "unhealthy" -> Color(0xFFF44336)
+        else -> Color(0xFF9E9E9E)
     }
 }
