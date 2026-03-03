@@ -78,6 +78,8 @@ import com.tharun.vitalmind.ui.InsightsScreen
 import com.tharun.vitalmind.ui.VitalMindAIScreen
 import com.tharun.vitalmind.ui.StressTerrainViewModel
 import com.tharun.vitalmind.ui.StressTerrainMapScreen
+import com.tharun.vitalmind.ui.ProfileScreen
+import com.tharun.vitalmind.ui.NotificationSettingsScreen
 import com.tharun.vitalmind.ui.theme.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
@@ -123,6 +125,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Create notification channels immediately on app startup
+        com.tharun.vitalmind.notifications.NotificationHelper.createNotificationChannels(this)
+        android.util.Log.d("MainActivity", "Notification channels created on app startup")
+
+        // Schedule daily notification check at 9:15 PM (TESTING)
+        com.tharun.vitalmind.notifications.NotificationScheduler.scheduleDailyNotification(this)
+        android.util.Log.d("MainActivity", "Daily notification scheduled for 9:15 PM (TESTING)")
 
         setContent {
             VitalMindTheme {
@@ -356,6 +366,9 @@ class MainActivity : ComponentActivity() {
                         }
                         StressHistoryScreen(viewModel = stressHistoryViewModel, navController = navController)
                     }
+                    composable("notification_settings") {
+                        NotificationSettingsScreen(navController = navController)
+                    }
                 }
             }
         }
@@ -446,7 +459,7 @@ fun MainNavigation(viewModel: MainViewModel, navController: NavController) {
             0 -> Dashboard(state, navController, homeListState, viewModel)
             1 -> InsightsScreen(viewModel = viewModel, navController = navController, listState = insightsListState)
             2 -> VitalMindAIScreen(dashboardState = state, listState = aiListState)
-            3 -> ProfileScreen(state = state)
+            3 -> ProfileScreen(state = state, listState = profileListState, navController = navController)
         }
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -606,193 +619,6 @@ fun ModernTopAppBar(title: String, showBackButton: Boolean = true, onBackClick: 
                 modifier = Modifier.padding(vertical = 8.dp)
             )
             Spacer(modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ProfileScreen(state: DashboardState) {
-    Scaffold(
-        topBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(64.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Profile",
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
-        ) {
-            // Profile Header Card
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-                                    )
-                                )
-                            )
-                            .padding(20.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.primary,
-                                        androidx.compose.foundation.shape.CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = state.userName.take(1).uppercase(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    state.userName,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    "VitalMind User",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Health Stats Section
-            item {
-                SectionTitle(title = "Health Statistics", icon = Icons.AutoMirrored.Filled.ShowChart)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // Quick Stats Cards
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ProfileStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                        label = "Steps",
-                        value = state.steps,
-                        color = StepCountPurple
-                    )
-                    ProfileStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Favorite,
-                        label = "Heart Rate",
-                        value = state.heartRate,
-                        unit = "bpm",
-                        color = ActivityRingRed
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ProfileStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.LocalFireDepartment,
-                        label = "Calories",
-                        value = state.calories,
-                        unit = "kcal",
-                        color = LightGreen
-                    )
-                    ProfileStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Map,
-                        label = "Distance",
-                        value = state.distance,
-                        unit = "km",
-                        color = StepDistanceCyan
-                    )
-                }
-            }
-
-            // Detailed Info Section
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-                SectionTitle(title = "Detailed Information", icon = Icons.Default.Info)
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        ProfileDataRow("Sleep Duration", state.sleepDuration)
-                        ProfileDataRow("Last Activity", state.lastActivity)
-                        ProfileDataRow("Weight", state.weight)
-                        ProfileDataRow("Floors Climbed", state.floorsClimbed)
-                        ProfileDataRowLast("Move Minutes", state.moveMinutes)
-                    }
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-            }
         }
     }
 }
