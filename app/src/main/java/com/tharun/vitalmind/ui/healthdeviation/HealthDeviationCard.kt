@@ -208,7 +208,10 @@ fun HealthDeviationCard(
  * Shows baseline collection progress
  */
 @Composable
-private fun BaselineCollectionView(daysCollected: Int, daysNeeded: Int) {
+private fun BaselineCollectionView(
+    daysCollected: Int,
+    daysNeeded: Int
+) {
     val progress = daysCollected.toFloat() / daysNeeded.toFloat()
     val daysRemaining = daysNeeded - daysCollected
 
