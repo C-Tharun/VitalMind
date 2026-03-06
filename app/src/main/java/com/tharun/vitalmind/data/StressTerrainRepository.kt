@@ -29,7 +29,14 @@ data class StressCluster(
     val longitude: Double,
     val weight: Float, // 0-1 representing stress intensity
     val eventCount: Int,
-    val isCalmingZone: Boolean = false
+    val isCalmingZone: Boolean = false,
+    // Additional detailed information for UI display
+    val averageStressScore: Float = 0f,
+    val stressLevel: String = "",
+    val mood: String = "",
+    val firstOccurrence: Long = 0L,
+    val lastOccurrence: Long = 0L,
+    val occurrenceDates: List<String> = emptyList()
 )
 
 /**
@@ -420,12 +427,39 @@ class StressTerrainRepository(
                 1f - (avgLevel / 2f).coerceIn(0f, 1f)
             }
 
+            // Calculate average stress score
+            val avgStressScore = entries.map { it.stress_score }.average().toFloat()
+
+            // Get most common mood and stress level
+            val moodCounts = entries.groupingBy { it.mood }.eachCount()
+            val mostCommonMood = moodCounts.maxByOrNull { it.value }?.key ?: "Unknown"
+
+            val levelCounts = entries.groupingBy { it.stress_level }.eachCount()
+            val mostCommonLevel = levelCounts.maxByOrNull { it.value }?.key ?: "Unknown"
+
+            // Get time range
+            val timestamps = entries.map { it.timestamp }
+            val firstOccurrence = timestamps.minOrNull() ?: 0L
+            val lastOccurrence = timestamps.maxOrNull() ?: 0L
+
+            // Format occurrence dates
+            val dateFormatter = java.text.SimpleDateFormat("MMM dd", Locale.getDefault())
+            val occurrenceDates = timestamps.map {
+                dateFormatter.format(Date(it))
+            }.distinct().sorted()
+
             StressCluster(
                 latitude = avgLat,
                 longitude = avgLng,
                 weight = normalizedWeight,
                 eventCount = entries.size,
-                isCalmingZone = !isStressed
+                isCalmingZone = !isStressed,
+                averageStressScore = avgStressScore,
+                stressLevel = mostCommonLevel,
+                mood = mostCommonMood,
+                firstOccurrence = firstOccurrence,
+                lastOccurrence = lastOccurrence,
+                occurrenceDates = occurrenceDates
             )
         }.sortedByDescending { it.eventCount }
 
