@@ -36,7 +36,7 @@ class HealthTrendAnalyzer {
         val baselineHR = baseline.resting_heart_rate
         val percentageDiff = ((currentRestingHR - baselineHR) / baselineHR * 100).toInt()
 
-        val isElevated = percentageDiff > 1
+        val isElevated = percentageDiff > 15  // Alert if 15% above baseline
         val isRecovered = !isElevated && abs(percentageDiff) < 5
 
         // Detect trends (requires at least 3 days of data)
@@ -63,34 +63,74 @@ class HealthTrendAnalyzer {
             return SleepAnalysis()
         }
 
-        val sleepReadings = recentData
-            .mapNotNull { it.sleepDuration }
-            .map { it / 60f } // Convert to hours
+        // Get yesterday's sleep (attribute sleep to the day you wake up)
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DATE, -1) // Yesterday
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val yesterdayStart = cal.timeInMillis
+        cal.add(java.util.Calendar.DATE, 1)
+        val yesterdayEnd = cal.timeInMillis
 
-        if (sleepReadings.isEmpty()) {
-            return SleepAnalysis()
-        }
+        // Get all sleep sessions where wake-up time was yesterday
+        val lastNightSleepMinutes = recentData
+            .filter { it.sleepDuration != null && it.sleepDuration!! > 0 }
+            .filter {
+                val sleepEnd = it.timestamp + it.sleepDuration!! * 60 * 1000
+                sleepEnd > yesterdayStart && sleepEnd <= yesterdayEnd
+            }
+            .sumOf { it.sleepDuration ?: 0L }
 
-        val lastNightSleep = sleepReadings.lastOrNull() ?: 0f
+        val lastNightSleep = lastNightSleepMinutes / 60f // Convert to hours
         val averageSleep = baseline.total_sleep_minutes / 60f
 
         val isLow = lastNightSleep < 5f
-        val isRecovered = lastNightSleep > averageSleep && sleepReadings.size > 1 &&
-                          sleepReadings[sleepReadings.lastIndex - 1] < averageSleep
+        val isRecovered = lastNightSleep > averageSleep && lastNightSleep > 5f
 
-        // Calculate sleep debt (deficit from recommended 7-8 hours)
-        val weeklyDeficit = sleepReadings.takeLast(7).sumOf { maxOf(0.0, 7.0 - it.toDouble()) }
+        // Calculate sleep debt (deficit from recommended 7 hours per night)
+        // Group by day and sum sleep for each day
+        val dailySleepHours = mutableListOf<Float>()
+        for (daysAgo in 0 until 7) {
+            val dayCal = java.util.Calendar.getInstance()
+            dayCal.add(java.util.Calendar.DATE, -daysAgo - 1)
+            dayCal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            dayCal.set(java.util.Calendar.MINUTE, 0)
+            dayCal.set(java.util.Calendar.SECOND, 0)
+            dayCal.set(java.util.Calendar.MILLISECOND, 0)
+            val dayStart = dayCal.timeInMillis
+            dayCal.add(java.util.Calendar.DATE, 1)
+            val dayEnd = dayCal.timeInMillis
+
+            val daySleepMinutes = recentData
+                .filter { it.sleepDuration != null && it.sleepDuration!! > 0 }
+                .filter {
+                    val sleepEnd = it.timestamp + it.sleepDuration!! * 60 * 1000
+                    sleepEnd > dayStart && sleepEnd <= dayEnd
+                }
+                .sumOf { it.sleepDuration ?: 0L }
+
+            if (daySleepMinutes > 0) {
+                dailySleepHours.add(daySleepMinutes / 60f)
+            }
+        }
+
+        // Calculate weekly sleep deficit (how many hours short of 7h per night)
+        val weeklyDeficit = dailySleepHours.sumOf { maxOf(0.0, 7.0 - it.toDouble()) }.toFloat()
 
         // Detect declining trend
-        val trend = detectTrend(sleepReadings.takeLast(3))
+        val trend = if (dailySleepHours.size >= 3) {
+            detectTrend(dailySleepHours.takeLast(3))
+        } else 0f
 
         return SleepAnalysis(
             lastNightHours = lastNightSleep,
             averageHours = averageSleep,
             isLow = isLow,
             isRecovered = isRecovered,
-            weeklyDeficitHours = weeklyDeficit.toFloat(),
-            decliningTrend = trend < 0
+            weeklyDeficitHours = weeklyDeficit,
+            decliningTrend = (trend as? Int ?: 0) < 0
         )
     }
 

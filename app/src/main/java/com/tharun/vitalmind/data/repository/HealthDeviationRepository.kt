@@ -576,22 +576,17 @@ class HealthDeviationRepository(
     }
 
     private fun computeTodaySleepMinutes(todayData: List<HealthData>, todayStart: Long): Int {
-        // Calculate sleep overlapping with today (matching MainViewModel logic)
+        // Attribute entire sleep sessions to the day you wake up (standard sleep tracking)
         val todayEnd = todayStart + 24 * 60 * 60 * 1000
         val sleepRecords = todayData.filter { it.sleepDuration != null && it.sleepDuration > 0 }
 
         var totalSleepMinutes = 0L
         for (record in sleepRecords) {
-            val sleepStart = record.timestamp
-            val sleepEnd = sleepStart + (record.sleepDuration!! * 60 * 1000)
+            val sleepEnd = record.timestamp + (record.sleepDuration!! * 60 * 1000)
 
-            // Calculate overlap with today
-            val overlapStart = maxOf(sleepStart, todayStart)
-            val overlapEnd = minOf(sleepEnd, todayEnd)
-
-            if (overlapEnd > overlapStart) {
-                val overlapMinutes = (overlapEnd - overlapStart) / (60 * 1000)
-                totalSleepMinutes += overlapMinutes
+            // Attribute this sleep session to the day when you woke up
+            if (sleepEnd > todayStart && sleepEnd <= todayEnd) {
+                totalSleepMinutes += record.sleepDuration!!
             }
         }
 
