@@ -355,6 +355,39 @@ class HealthDeviationViewModel(
     fun clearExportMessage() {
         _exportMessage.value = null
     }
+
+    // ==================================================================================
+    // TEMPORARY DEMO BASELINE RESET (REMOVE AFTER REVIEW)
+    // ==================================================================================
+    /**
+     * TEMPORARY DEMO OVERRIDE:
+     * Resets baseline and rebuilds using historical data from 2026-02-11 to 2026-02-20.
+     * REMOVE THIS FUNCTION AFTER DEMO.
+     */
+    fun demoResetAndRebuildBaseline() {
+        Log.d("HealthDeviationVM", "🔧 DEMO RESET: Starting...")
+
+        // Set UI to Training state immediately
+        _uiState.value = HealthDeviationUiStateExtended.TrainingModel
+
+        viewModelScope.launch {
+            repository.demoResetAndRebuildBaseline()
+                .onSuccess {
+                    Log.d("HealthDeviationVM", "✅ DEMO RESET: Complete! Setting UI to Ready")
+                    _uiState.value = HealthDeviationUiStateExtended.Ready
+                }
+                .onFailure { error ->
+                    Log.e("HealthDeviationVM", "❌ DEMO RESET: Failed - ${error.message}", error)
+                    _uiState.value = HealthDeviationUiStateExtended.Error(
+                        "Demo reset failed: ${error.message}"
+                    )
+                }
+        }
+    }
+    // ==================================================================================
+    // END TEMPORARY DEMO CODE
+    // ==================================================================================
 }
+
 
 
