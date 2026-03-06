@@ -74,19 +74,16 @@ fun MetricHistoryScreen(
             cal.add(Calendar.DATE, 1)
             val dayEnd = cal.timeInMillis
 
+            // Filter sleep records where wake-up time falls within this day
             val selectedDateSleepData = historyData.filter { data ->
-                val sleepStart = data.timestamp
                 val sleepEnd = data.timestamp + (data.sleepDuration ?: 0L) * 60 * 1000
-                sleepStart < dayEnd && sleepEnd > dayStart
+                sleepEnd > dayStart && sleepEnd <= dayEnd
             }
-            val selectedTotalSleep: Int = if (selectedDateSleepData.isNotEmpty()) {
-                val minStart = selectedDateSleepData.minOf { it.timestamp }
-                var maxEnd = selectedDateSleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
-                if (maxEnd < minStart) {
-                    maxEnd += 24 * 60 * 60 * 1000
-                }
-                ((maxEnd - minStart) / 60000).toInt()
-            } else 0
+
+            // Sum all sleep durations (entire sessions attributed to wake-up day)
+            val selectedTotalSleep: Int = selectedDateSleepData.sumOf {
+                it.sleepDuration ?: 0L
+            }.toInt()
 
             Triple(dayStart, dayEnd, Pair(selectedDateSleepData, selectedTotalSleep))
         } else {

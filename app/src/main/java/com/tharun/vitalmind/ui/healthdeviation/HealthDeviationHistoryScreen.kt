@@ -208,55 +208,60 @@ fun HealthDeviationHistoryScreen(
             // Trend Chart - only show if we have at least 2 data points for a meaningful chart
             if (history.size >= 2) {
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "Deviation Score Trend",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Icon(
-                                    Icons.Default.ShowChart,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                    // Create and validate chart entries before rendering
+                    val validEntries = remember(history) {
+                        history
+                            .filter { it.deviation_score > 0 } // Filter out invalid scores
+                            .sortedBy { it.timestamp }
+                            .mapIndexed { index, entry ->
+                                entryOf(index.toFloat(), entry.deviation_score)
                             }
+                    }
 
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Chart - safely create with validated data
-                            val chartEntryModel = remember(history) {
-                                val entries = history.reversed().mapIndexed { index, entry ->
-                                    entryOf(index.toFloat(), entry.deviation_score)
+                    // Only render chart if we have at least 2 valid entries
+                    if (validEntries.size >= 2) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Deviation Score Trend",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Icon(
+                                        Icons.Default.ShowChart,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
-                                // Only create chart if we have data
-                                if (entries.isNotEmpty()) {
-                                    ChartEntryModelProducer(entries)
-                                } else {
-                                    ChartEntryModelProducer(listOf(entryOf(0f, 0f)))
-                                }
-                            }
 
-                            ProvideChartStyle(rememberChartStyle()) {
-                                Chart(
-                                    chart = lineChart(),
-                                    chartModelProducer = chartEntryModel,
-                                    startAxis = rememberStartAxis(),
-                                    bottomAxis = rememberBottomAxis(),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(200.dp)
-                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Chart - safely create with validated data
+                                val chartEntryModel = remember(validEntries) {
+                                    ChartEntryModelProducer(validEntries)
+                                }
+
+                                ProvideChartStyle(rememberChartStyle()) {
+                                    Chart(
+                                        chart = lineChart(),
+                                        chartModelProducer = chartEntryModel,
+                                        startAxis = rememberStartAxis(),
+                                        bottomAxis = rememberBottomAxis(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -760,6 +765,9 @@ private fun formatContributorName(contributor: String): String {
         else -> contributor.replace("_", " ").replaceFirstChar { it.uppercase() }
     }
 }
+
+
+
 
 
 
