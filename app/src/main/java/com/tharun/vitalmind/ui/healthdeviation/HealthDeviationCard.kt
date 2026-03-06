@@ -1,10 +1,14 @@
 package com.tharun.vitalmind.ui.healthdeviation
 
 import android.util.Log
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.DeveloperMode
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.tharun.vitalmind.data.remote.HealthDeviationResponse
 import java.util.Locale
 
@@ -26,7 +31,9 @@ fun HealthDeviationCard(
     onAnalyze: () -> Unit,
     onRetry: () -> Unit,
     onExport: () -> Unit,
-    exportMessage: String?
+    exportMessage: String?,
+    onDemoReset: () -> Unit,  // TEMPORARY DEMO (REMOVE AFTER REVIEW)
+    onViewHistory: () -> Unit
 ) {
     // Log current state for debugging
     LaunchedEffect(uiState) {
@@ -49,6 +56,9 @@ fun HealthDeviationCard(
         }
     }
 
+    // TEMPORARY DEMO: Developer menu state (REMOVE AFTER REVIEW)
+    var showDeveloperMenu by remember { mutableStateOf(false) }
+
     Box {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Card(
@@ -62,16 +72,34 @@ fun HealthDeviationCard(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Health Deviation Analysis",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Personalized baseline deviation using ML",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
+                    // Header with title and developer menu icon
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Health Deviation Analysis",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Personalized baseline deviation using ML",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        // TEMPORARY DEMO: Developer menu button (REMOVE AFTER REVIEW)
+                        IconButton(onClick = { showDeveloperMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.DeveloperMode,
+                                contentDescription = "Developer Options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
 
                     when (uiState) {
                         is HealthDeviationUiStateExtended.Idle -> {
@@ -85,7 +113,8 @@ fun HealthDeviationCard(
                         is HealthDeviationUiStateExtended.CollectingBaseline -> {
                             BaselineCollectionView(
                                 daysCollected = uiState.daysCollected,
-                                daysNeeded = uiState.daysNeeded
+                                daysNeeded = uiState.daysNeeded,
+                                onDemoReset = onDemoReset  // TEMPORARY DEMO (REMOVE AFTER REVIEW)
                             )
                         }
 
@@ -168,28 +197,107 @@ fun HealthDeviationCard(
                 }
             }
 
-            // Export Baseline Data button (for research evaluation)
+            // Action cards (for research evaluation and history viewing)
             // Only show when baseline data exists (not during Idle state)
             if (uiState !is HealthDeviationUiStateExtended.Idle) {
-                OutlinedButton(
-                    onClick = {
-                        Log.d("HealthDeviationCard", "📤 Export Baseline button clicked")
-                        onExport()
-                    },
+                // Export Baseline Data card
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
+                        .padding(horizontal = 16.dp)
+                        .clickable {
+                            Log.d("HealthDeviationCard", "📤 Export Baseline button clicked")
+                            onExport()
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = "Export",
-                        modifier = Modifier.size(18.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "Export Baseline Data",
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "Download your baseline metrics",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // View History card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clickable {
+                            Log.d("HealthDeviationCard", "📊 View History button clicked")
+                            onViewHistory()
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export Baseline Data")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "View History",
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "See your deviation analysis over time",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -202,6 +310,91 @@ fun HealthDeviationCard(
                 .padding(16.dp)
         )
     }
+
+    // ==================================================================================
+    // TEMPORARY DEMO: Developer Menu Dialog (REMOVE AFTER REVIEW)
+    // ==================================================================================
+    if (showDeveloperMenu) {
+        Dialog(onDismissRequest = { showDeveloperMenu = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeveloperMode,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Developer Options",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    HorizontalDivider()
+
+                    // Warning text
+                    Text(
+                        text = "⚠️ These options are for demo/testing purposes only",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+
+                    // Demo reset button
+                    Button(
+                        onClick = {
+                            Log.d("HealthDeviationCard", "🔧 DEMO RESET button clicked from developer menu")
+                            showDeveloperMenu = false
+                            onDemoReset()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("🔧 Force Baseline (Feb 11-20, 2026)")
+                    }
+
+                    // Info text
+                    Text(
+                        text = "This will:\n" +
+                                "• Clear existing baseline data\n" +
+                                "• Reset training flags\n" +
+                                "• Rebuild baseline using Feb 11-20, 2026 data\n" +
+                                "• Immediately train the model",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+
+                    // Close button
+                    OutlinedButton(
+                        onClick = { showDeveloperMenu = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+    // ==================================================================================
+    // END TEMPORARY DEMO CODE
+    // ==================================================================================
 }
 
 /**
@@ -210,7 +403,8 @@ fun HealthDeviationCard(
 @Composable
 private fun BaselineCollectionView(
     daysCollected: Int,
-    daysNeeded: Int
+    daysNeeded: Int,
+    onDemoReset: () -> Unit  // TEMPORARY DEMO (REMOVE AFTER REVIEW)
 ) {
     val progress = daysCollected.toFloat() / daysNeeded.toFloat()
     val daysRemaining = daysNeeded - daysCollected
@@ -617,13 +811,20 @@ private fun generateQuantitativeExplanation(
             if (baseline == 0f) return null
 
             val diff = today - baseline
-            val hours = kotlin.math.abs(diff / 60f)
-            val minutes = kotlin.math.abs(diff % 60f).toInt()
+
+            // Convert difference to hours and minutes
+            val totalDiffMinutes = kotlin.math.abs(diff).toInt()
+            val hours = totalDiffMinutes / 60
+            val minutes = totalDiffMinutes % 60
+
+            // Convert baseline to hours and minutes for display
+            val baselineHours = baseline.toInt() / 60
+            val baselineMinutes = baseline.toInt() % 60
 
             if (diff < 0) {
-                "Your sleep was ${hours.toInt()}h ${minutes}m shorter than your baseline (${(baseline / 60).toInt()}h ${(baseline % 60).toInt()}m avg)."
+                "Your sleep was ${hours}h ${minutes}m shorter than your baseline (${baselineHours}h ${baselineMinutes}m avg)."
             } else if (diff > 0) {
-                "Your sleep was ${hours.toInt()}h ${minutes}m longer than your baseline (${(baseline / 60).toInt()}h ${(baseline % 60).toInt()}m avg)."
+                "Your sleep was ${hours}h ${minutes}m longer than your baseline (${baselineHours}h ${baselineMinutes}m avg)."
             } else {
                 "Your sleep duration matched your baseline."
             }

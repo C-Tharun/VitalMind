@@ -366,6 +366,28 @@ class MainActivity : ComponentActivity() {
                         }
                         StressHistoryScreen(viewModel = stressHistoryViewModel, navController = navController)
                     }
+                    composable("health_deviation_history") {
+                        val context = LocalContext.current
+                        val db = AppDatabase.getDatabase(context)
+                        val state by viewModel.state.collectAsState()
+                        val baselineTrainingPrefs = remember {
+                            com.tharun.vitalmind.data.BaselineTrainingPreferences(context)
+                        }
+                        val deviationRepo = com.tharun.vitalmind.data.repository.HealthDeviationRepository(
+                            healthDataRepository = viewModel.repository,
+                            baselineDao = db.healthDeviationBaselineDao(),
+                            historyDao = db.healthDeviationHistoryDao(),
+                            trainingPreferences = baselineTrainingPrefs,
+                            userId = state.userId
+                        )
+                        val deviationHistoryViewModel = remember(state.userId) {
+                            com.tharun.vitalmind.ui.healthdeviation.HealthDeviationHistoryViewModel(deviationRepo)
+                        }
+                        com.tharun.vitalmind.ui.healthdeviation.HealthDeviationHistoryScreen(
+                            viewModel = deviationHistoryViewModel,
+                            navController = navController
+                        )
+                    }
                     composable("notification_settings") {
                         NotificationSettingsScreen(navController = navController)
                     }
@@ -1032,6 +1054,7 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
             HealthDeviationRepository(
                 healthDataRepository = viewModel.repository,
                 baselineDao = db.healthDeviationBaselineDao(),
+                historyDao = db.healthDeviationHistoryDao(),
                 trainingPreferences = baselineTrainingPreferences,
                 userId = state.userId
             )
@@ -1292,7 +1315,9 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                     onAnalyze = { healthDeviationViewModel.analyzeHealthDeviation() },
                     onRetry = { healthDeviationViewModel.retryAnalysis() },
                     onExport = { healthDeviationViewModel.exportBaselineData(context) },
-                    exportMessage = healthDeviationExportMessage
+                    exportMessage = healthDeviationExportMessage,
+                    onDemoReset = { healthDeviationViewModel.demoResetAndRebuildBaseline() },  // TEMPORARY DEMO (REMOVE AFTER REVIEW)
+                    onViewHistory = { navController.navigate("health_deviation_history") }
                 )
                 Spacer(modifier = Modifier.height(24.dp))
             }
