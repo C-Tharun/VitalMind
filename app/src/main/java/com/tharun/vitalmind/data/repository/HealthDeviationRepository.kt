@@ -5,6 +5,8 @@ import com.tharun.vitalmind.data.HealthData
 import com.tharun.vitalmind.data.HealthDataRepository
 import com.tharun.vitalmind.data.HealthDeviationBaseline
 import com.tharun.vitalmind.data.HealthDeviationBaselineDao
+import com.tharun.vitalmind.data.HealthDeviationHistory
+import com.tharun.vitalmind.data.HealthDeviationHistoryDao
 import com.tharun.vitalmind.data.remote.HealthDeviationRequest
 import com.tharun.vitalmind.data.remote.HealthDeviationResponse
 import com.tharun.vitalmind.data.remote.TrainBaselineRequest
@@ -42,6 +44,7 @@ interface HealthDeviationApiService {
 class HealthDeviationRepository(
     private val healthDataRepository: HealthDataRepository,
     private val baselineDao: HealthDeviationBaselineDao,
+    private val historyDao: HealthDeviationHistoryDao,
     private val trainingPreferences: BaselineTrainingPreferences,
     private val userId: String
 ) {
@@ -325,6 +328,37 @@ class HealthDeviationRepository(
             Log.d("HealthDeviationRepo", "✅ Health deviation score: ${response.health_deviation_score}")
             Log.d("HealthDeviationRepo", "✅ Drift level: ${response.stress_drift_level}")
             Log.d("HealthDeviationRepo", "✅ Confidence: ${response.confidence}")
+
+            // Save to history for tracking
+            try {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                val currentDate = dateFormat.format(java.util.Date())
+
+                val historyRecord = HealthDeviationHistory(
+                    userId = userId,
+                    timestamp = System.currentTimeMillis(),
+                    date = currentDate,
+                    deviation_score = response.health_deviation_score,
+                    drift_level = response.stress_drift_level,
+                    confidence = response.confidence,
+                    top_contributors = response.top_contributors.joinToString(","),
+                    steps = stepsTotal,
+                    sleep_minutes = totalSleepMinutes,
+                    calories = caloriesBurned,
+                    avg_heart_rate = avgHeartRate,
+                    resting_heart_rate = restingHeartRate
+                )
+
+                historyDao.insertDeviationHistory(historyRecord)
+                Log.d("HealthDeviationRepo", "💾 Saved to history database")
+
+                // Clean up old records (older than 30 days)
+                val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+                historyDao.deleteOldRecords(userId, thirtyDaysAgo)
+            } catch (e: Exception) {
+                Log.w("HealthDeviationRepo", "⚠️ Failed to save history: ${e.message}")
+                // Don't fail the whole operation if history save fails
+            }
 
             Result.success(response)
 
@@ -655,6 +689,13 @@ class HealthDeviationRepository(
             val avgHR = baselineData.map { it.avg_heart_rate }.average().toFloat()
             val avgRestingHR = baselineData.map { it.resting_heart_rate }.average().toFloat()
 
+            Log.d("HealthDeviationRepo", "📊 Baseline Statistics:")
+            Log.d("HealthDeviationRepo", "   Avg Steps: $avgSteps")
+            Log.d("HealthDeviationRepo", "   Avg Sleep: $avgSleep min (${avgSleep.toInt()/60}h ${avgSleep.toInt()%60}m)")
+            Log.d("HealthDeviationRepo", "   Avg Calories: $avgCalories")
+            Log.d("HealthDeviationRepo", "   Avg HR: $avgHR")
+            Log.d("HealthDeviationRepo", "   Avg Resting HR: $avgRestingHR")
+
             com.tharun.vitalmind.ui.healthdeviation.BaselineMetrics(
                 avgSteps = avgSteps,
                 avgSleepMinutes = avgSleep,
@@ -691,8 +732,14 @@ class HealthDeviationRepository(
             if (todayData.isEmpty()) return@withContext null
 
             val steps = todayData.sumOf { it.steps ?: 0 }
-            val sleepMinutes = (todayData.sumOf { it.sleepDuration ?: 0L } / 60000L).toInt()
+            // sleepDuration is already in minutes, no conversion needed
+            val sleepMinutes = todayData.sumOf { it.sleepDuration ?: 0L }.toInt()
             val calories = todayData.mapNotNull { it.calories }.sum()
+
+            Log.d("HealthDeviationRepo", "📊 Today's Metrics Calculation:")
+            Log.d("HealthDeviationRepo", "   Steps: $steps")
+            Log.d("HealthDeviationRepo", "   Sleep Minutes: $sleepMinutes (${sleepMinutes/60}h ${sleepMinutes%60}m)")
+            Log.d("HealthDeviationRepo", "   Calories: $calories")
 
             val heartRates = todayData.mapNotNull { it.heartRate }
             val avgHR = if (heartRates.isNotEmpty()) heartRates.average().toFloat() else 70f
@@ -769,7 +816,175 @@ class HealthDeviationRepository(
             Result.failure(e)
         }
     }
+
+    // ==================================================================================
+    // TEMPORARY DEMO BASELINE RESET (REMOVE AFTER REVIEW)
+    // ==================================================================================
+    /**
+     * TEMPORARY DEMO OVERRIDE:
+     * For review purposes, baseline is forced to use 2026-02-11 to 2026-02-20.
+     * REMOVE THIS FUNCTION AFTER DEMO.
+     *
+     * This function:
+     * 1. Clears all existing baseline data
+     * 2. Resets training flags
+     * 3. Reconstructs baseline using historical data from 2026-02-11 to 2026-02-20
+     * 4. Immediately triggers server training
+     * 5. Updates UI state to Ready after successful training
+     */
+    suspend fun demoResetAndRebuildBaseline(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("DEMO_BASELINE", "🔧 DEMO RESET: Starting baseline reset and rebuild")
+
+            // Step 1: Clear existing baseline data
+            Log.d("DEMO_BASELINE", "Step 1: Clearing existing baseline data...")
+            baselineDao.deleteBaselineForUser(userId)
+
+            // Step 2: Reset training flags
+            Log.d("DEMO_BASELINE", "Step 2: Resetting training flags...")
+            trainingPreferences.resetTrainingStatus(userId)
+
+            // Step 3: Fetch ALL historical health data
+            Log.d("DEMO_BASELINE", "Step 3: Fetching all historical health data...")
+            val allHealthData = healthDataRepository.getHealthData(userId).first()
+
+            if (allHealthData.isEmpty()) {
+                Log.e("DEMO_BASELINE", "❌ No health data available for demo baseline")
+                return@withContext Result.failure(Exception("No health data available"))
+            }
+
+            Log.d("DEMO_BASELINE", "   Total health records: ${allHealthData.size}")
+
+            // Step 4: Define date range for demo baseline (2026-02-11 to 2026-02-20)
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val startDate = dateFormat.parse("2026-02-11")!!.time
+            val endDate = dateFormat.parse("2026-02-20")!!.time + (24 * 60 * 60 * 1000) // Include end day
+
+            Log.d("DEMO_BASELINE", "Step 4: Filtering data for date range 2026-02-11 to 2026-02-20")
+            Log.d("DEMO_BASELINE", "   Start timestamp: $startDate")
+            Log.d("DEMO_BASELINE", "   End timestamp: $endDate")
+
+            // Step 5: Group health data by day within the target range
+            val targetRangeData = allHealthData.filter {
+                it.timestamp >= startDate && it.timestamp < endDate
+            }
+
+            Log.d("DEMO_BASELINE", "   Filtered records in range: ${targetRangeData.size}")
+
+            if (targetRangeData.isEmpty()) {
+                Log.e("DEMO_BASELINE", "❌ No health data found between 2026-02-11 and 2026-02-20")
+                return@withContext Result.failure(Exception("No health data found in target date range"))
+            }
+
+            // Group by day
+            val dataByDay = targetRangeData.groupBy { record ->
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = record.timestamp
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                cal.set(java.util.Calendar.MINUTE, 0)
+                cal.set(java.util.Calendar.SECOND, 0)
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+                cal.timeInMillis
+            }
+
+            Log.d("DEMO_BASELINE", "   Unique days found: ${dataByDay.size}")
+
+            // Step 6: Create baseline records for each day
+            Log.d("DEMO_BASELINE", "Step 5: Creating baseline records for each day...")
+
+            var validDaysCreated = 0
+            dataByDay.entries.sortedBy { it.key }.forEach { (dayStart, dayData) ->
+                val dayKey = dayKey(dayStart)
+
+                // Calculate metrics for this day
+                val daySteps = dayData.sumOf { it.steps ?: 0 }
+                val dayCalories = dayData.sumOf { it.calories?.toDouble() ?: 0.0 }.toFloat()
+                val dayHeartRates = dayData.mapNotNull { it.heartRate }
+                val dayMoveMinutes = dayData.sumOf { it.moveMinutes ?: 0 }
+
+                // Get recent context (7 days before this day)
+                val sevenDaysBeforeThisDay = dayStart - (7 * 24 * 60 * 60 * 1000L)
+                val recentContextData = allHealthData.filter {
+                    it.timestamp >= sevenDaysBeforeThisDay && it.timestamp < dayStart + (24 * 60 * 60 * 1000)
+                }
+
+                val avgHeartRate = computeAvgHeartRate(dayHeartRates, recentContextData)
+                val restingHeartRate = computeRestingHeartRate(recentContextData, avgHeartRate)
+                val hrVariance = computeHeartRateVariance(recentContextData)
+                val totalSleepMinutes = computeTodaySleepMinutes(dayData, dayStart)
+                val caloriesBurned = if (dayCalories > 0f) dayCalories else computeEstimatedCalories(daySteps)
+                val sedentaryRatio = computeSedentaryRatio(dayMoveMinutes, daySteps)
+                val movementVariance = computeMovementVariance(recentContextData)
+                val activityLoadIndex = computeActivityLoadIndex(daySteps, caloriesBurned)
+                val sleepVariance = computeSleepVariance(recentContextData)
+
+                // DEMO: Include ALL days in target range, even with zero sleep
+                // This ensures we get exactly 10 days for Feb 11-20, 2026
+                val baseline = HealthDeviationBaseline(
+                    userId = userId,
+                    date = dayKey,
+                    timestamp = dayStart,
+                    avg_heart_rate = avgHeartRate,
+                    resting_heart_rate = restingHeartRate,
+                    hr_variance = hrVariance,
+                    steps_total = daySteps,
+                    total_sleep_minutes = totalSleepMinutes,
+                    calories_burned = caloriesBurned,
+                    sedentary_ratio = sedentaryRatio,
+                    movement_variance = movementVariance,
+                    activity_load_index = activityLoadIndex,
+                    sleep_consistency = sleepVariance
+                )
+
+                baselineDao.insertBaseline(baseline)
+                validDaysCreated++
+
+                Log.d("DEMO_BASELINE", "   ✅ Day $dayKey: Steps=$daySteps, Sleep=${totalSleepMinutes}min, HR=$avgHeartRate")
+            }
+
+            Log.d("DEMO_BASELINE", "Step 6: Baseline reconstruction complete!")
+            Log.d("DEMO_BASELINE", "   Valid days created: $validDaysCreated")
+
+            // For demo: Accept at least 7 days (relaxed from 10 for partial data scenarios)
+            val minimumRequired = 7
+            if (validDaysCreated < minimumRequired) {
+                Log.e("DEMO_BASELINE", "❌ Insufficient valid days: $validDaysCreated (need at least $minimumRequired)")
+                return@withContext Result.failure(Exception("Insufficient valid baseline days: found $validDaysCreated, need at least $minimumRequired"))
+            }
+
+            // Step 7: Immediately trigger server training
+            Log.d("DEMO_BASELINE", "Step 7: Triggering server training with reconstructed baseline...")
+            val trainingResult = trainBaselineOnServer()
+
+            if (trainingResult.isSuccess) {
+                Log.d("DEMO_BASELINE", "✅ DEMO RESET COMPLETE: Baseline trained successfully!")
+                Result.success(Unit)
+            } else {
+                Log.e("DEMO_BASELINE", "❌ Server training failed: ${trainingResult.exceptionOrNull()?.message}")
+                Result.failure(trainingResult.exceptionOrNull() ?: Exception("Training failed"))
+            }
+
+        } catch (e: Exception) {
+            Log.e("DEMO_BASELINE", "❌ Demo reset failed: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    // ==================================================================================
+    // END TEMPORARY DEMO CODE
+    // ==================================================================================
+
+    /**
+     * Get deviation history for the last 30 days
+     */
+    fun getDeviationHistory(): kotlinx.coroutines.flow.Flow<List<HealthDeviationHistory>> {
+        val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+        return historyDao.getDeviationHistory(userId, thirtyDaysAgo)
+    }
 }
+
+
+
+
 
 
 
