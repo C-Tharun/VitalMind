@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
         android.util.Log.d("MainActivity", "Notification channels created on app startup")
 
         // Schedule daily notification check at 9:15 PM (TESTING)
-        com.tharun.vitalmind.notifications.NotificationScheduler.scheduleDailyNotification(this)
+        com.tharun.vitalmind.notifications.NotificationScheduler.scheduleAllDailyNotifications(this)
         android.util.Log.d("MainActivity", "Daily notification scheduled for 9:15 PM (TESTING)")
 
         setContent {
@@ -978,6 +978,7 @@ fun heartPath(width: Float, height: Float, scale: Float): androidx.compose.ui.gr
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(state: DashboardState, navController: NavController, listState: LazyListState, viewModel: MainViewModel) {
+    val context = LocalContext.current
     var stepsGoal by remember { mutableStateOf(8000f) }
     var kcalGoal by remember { mutableStateOf(3000f) }
     var distanceGoal by remember { mutableStateOf(5f) }
@@ -992,7 +993,6 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
         HealthMetric(MetricType.SLEEP, state.sleepDuration, "", Icons.Default.Bedtime, StepCountPurple)
     )
     // --- Stress Score Feature ---
-    val context = LocalContext.current
     val db = AppDatabase.getDatabase(context)
     val stressViewModel = remember(state.userId) {
         com.tharun.vitalmind.ui.stress.StressViewModel(
@@ -1196,6 +1196,14 @@ fun Dashboard(state: DashboardState, navController: NavController, listState: La
                         stepsGoal = s
                         kcalGoal = k
                         distanceGoal = d
+                        // Save to SharedPreferences for notifications
+                        val prefs = context.getSharedPreferences("activity_goals", Context.MODE_PRIVATE)
+                        prefs.edit().apply {
+                            putInt("steps_goal", s.toInt())
+                            putInt("kcal_goal", k.toInt())
+                            putInt("distance_goal", d.toInt())
+                            apply()
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(28.dp))

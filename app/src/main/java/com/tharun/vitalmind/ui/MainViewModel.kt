@@ -482,7 +482,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Returns the total sleep (in minutes) for the given date, using the same logic as the history screen.
+     * Returns the total sleep (in minutes) for the given date.
+     * Attributes entire sleep sessions to the day you WAKE UP (standard sleep tracking).
      * If no date is provided, uses today.
      */
     fun getTotalSleepForDate(data: List<HealthData>, dateMillis: Long? = null): Int {
@@ -497,17 +498,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val dayStart = cal.timeInMillis
         cal.add(Calendar.DATE, 1)
         val dayEnd = cal.timeInMillis
-        val sleepData = data.filter { it.sleepDuration != null && (
-            (it.timestamp < dayEnd && (it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000) > dayStart)
-        ) }
-        return if (sleepData.isNotEmpty()) {
-            val minStart = sleepData.minOf { it.timestamp }
-            var maxEnd = sleepData.maxOf { it.timestamp + (it.sleepDuration ?: 0L) * 60 * 1000 }
-            if (maxEnd < minStart) {
-                maxEnd += 24 * 60 * 60 * 1000 // handle crossing midnight
+
+        // Filter sleep records where the END TIME (wake up time) falls within this day
+        // This attributes the entire sleep session to the day you wake up
+        val sleepData = data.filter {
+            it.sleepDuration != null && it.sleepDuration!! > 0
+        }
+
+        var totalSleepMinutes = 0L
+        for (record in sleepData) {
+            val sleepEnd = record.timestamp + record.sleepDuration!! * 60 * 1000
+
+            // Attribute this sleep session to the day when you woke up
+            if (sleepEnd > dayStart && sleepEnd <= dayEnd) {
+                totalSleepMinutes += record.sleepDuration!!
             }
-            ((maxEnd - minStart) / 60000).toInt()
-        } else 0
+        }
+
+        return totalSleepMinutes.toInt()
     }
 
     data class BaselineInsight(
@@ -744,6 +752,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else -> append("unknown. ")
                 }
                 append("User has walked %.1f km today. ".format(ctx.distanceKm))
+                // Add sleep information
+                val sleepHours = ctx.sleepMinutes / 60f
+                if (sleepHours > 0) {
+                    append("User slept %.1f hours last night (quality: ${ctx.sleepQuality}). ".format(sleepHours))
+                }
                 append("It is ${ctx.timeOfDay}. ")
                 append("Weather is ${ctx.weatherCondition ?: "unknown"}, ")
                 append(ctx.temperatureC?.let { "${it}°C, " } ?: "")

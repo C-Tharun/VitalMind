@@ -205,7 +205,25 @@ fun InsightsScreen(viewModel: MainViewModel, navController: NavController? = nul
                     aiExplanation = aiExplanations[idx],
                     aiExpanded = aiExpanded[idx] == true,
                     onExplain = {
-                        val prompt = "Explain in simple, non-medical language why a ${insight.deviationPercent.toInt()}% ${if (insight.deviationPercent < 0) "drop" else "increase"} in daily ${insight.metricName.lowercase()} compared to personal average may matter. Baseline: ${insight.baseline.toInt()}, Today: ${insight.todayValue.toInt()}"
+                        // Format values appropriately for each metric
+                        val (todayFormatted, baselineFormatted) = when (insight.metric) {
+                            MetricType.SLEEP -> {
+                                // Sleep is in minutes, convert to hours for display
+                                val todayHours = "%.1f hours".format(insight.todayValue / 60f)
+                                val baselineHours = "%.1f hours".format(insight.baseline / 60f)
+                                Pair(todayHours, baselineHours)
+                            }
+                            MetricType.STEPS -> {
+                                Pair("${insight.todayValue.toInt()} steps", "${insight.baseline.toInt()} steps")
+                            }
+                            MetricType.CALORIES -> {
+                                Pair("${insight.todayValue.toInt()} kcal", "${insight.baseline.toInt()} kcal")
+                            }
+                            else -> {
+                                Pair(insight.todayValue.toInt().toString(), insight.baseline.toInt().toString())
+                            }
+                        }
+                        val prompt = "Explain in simple, non-medical language why a ${kotlin.math.abs(insight.deviationPercent).toInt()}% ${if (insight.deviationPercent < 0) "drop" else "increase"} in daily ${insight.metricName.lowercase()} compared to personal average may matter. Baseline: $baselineFormatted, Today: $todayFormatted"
                         viewModel.requestAIExplanation(idx, prompt)
                         aiExpanded[idx] = true
                     },
