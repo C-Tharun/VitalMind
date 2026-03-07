@@ -1,5 +1,6 @@
 package com.tharun.vitalmind.ui.healthdeviation
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,15 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
-import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
-import com.patrykandpatrick.vico.compose.chart.Chart
-import com.patrykandpatrick.vico.compose.chart.line.lineChart
-import com.patrykandpatrick.vico.compose.style.ProvideChartStyle
-import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
-import com.patrykandpatrick.vico.core.entry.entryOf
 import com.tharun.vitalmind.data.HealthDeviationHistory
-import com.tharun.vitalmind.ui.theme.rememberChartStyle
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -205,61 +198,116 @@ fun HealthDeviationHistoryScreen(
                 }
             }
 
-            // Trend Chart - only show if we have at least 2 data points for a meaningful chart
+            // Trend Visualization - only show if we have at least 2 valid data points
             if (history.size >= 2) {
                 item {
-                    // Create and validate chart entries before rendering
-                    val validEntries = remember(history) {
-                        history
-                            .filter { it.deviation_score > 0 } // Filter out invalid scores
-                            .sortedBy { it.timestamp }
-                            .mapIndexed { index, entry ->
-                                entryOf(index.toFloat(), entry.deviation_score)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Deviation Score Trend",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Icon(
+                                    Icons.Default.Timeline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
-                    }
 
-                    // Only render chart if we have at least 2 valid entries
-                    if (validEntries.size >= 2) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Custom simple bar visualization - no external chart library
+                            val validScores = remember(history) {
+                                history
+                                    .filter { it.deviation_score > 0 && it.deviation_score.isFinite() }
+                                    .sortedBy { it.timestamp }
+                                    .takeLast(10) // Show last 10 entries
+                            }
+
+                            if (validScores.isNotEmpty()) {
+                                val maxScore = validScores.maxOf { it.deviation_score }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    verticalArrangement = Arrangement.Bottom
                                 ) {
-                                    Text(
-                                        "Deviation Score Trend",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Icon(
-                                        Icons.Default.ShowChart,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // Chart - safely create with validated data
-                                val chartEntryModel = remember(validEntries) {
-                                    ChartEntryModelProducer(validEntries)
-                                }
-
-                                ProvideChartStyle(rememberChartStyle()) {
-                                    Chart(
-                                        chart = lineChart(),
-                                        chartModelProducer = chartEntryModel,
-                                        startAxis = rememberStartAxis(),
-                                        bottomAxis = rememberBottomAxis(),
+                                    Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(200.dp)
+                                            .weight(1f),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        validScores.forEach { entry ->
+                                            val barHeight = if (maxScore > 0) {
+                                                (entry.deviation_score / maxScore).coerceIn(0f, 1f)
+                                            } else 0f
+
+                                            val barColor = when (entry.drift_level) {
+                                                "Low" -> Color(0xFF4CAF50)
+                                                "Medium" -> Color(0xFFFF9800)
+                                                "High" -> Color(0xFFF44336)
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+
+                                            Column(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(horizontal = 2.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .fillMaxHeight(barHeight)
+                                                        .background(
+                                                            barColor,
+                                                            RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                                        )
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Simple legend
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Last ${validScores.size} analyses",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "No valid data to display",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -765,6 +813,8 @@ private fun formatContributorName(contributor: String): String {
         else -> contributor.replace("_", " ").replaceFirstChar { it.uppercase() }
     }
 }
+
+
 
 
 
