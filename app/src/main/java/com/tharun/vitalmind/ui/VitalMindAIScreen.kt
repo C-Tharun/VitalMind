@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -119,66 +120,33 @@ fun VitalMindAIScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .height(80.dp),
+                    .height(64.dp),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                                )
-                            )
-                        )
                         .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    androidx.compose.foundation.shape.CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "🤖",
-                                fontSize = 28.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "VitalMind AI",
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Your intelligent health companion",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = {
-                            aiViewModel.clearHistory()
-                            aiViewModel.clearUserMessage()
-                            showSuggestions = true
-                        }) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Clear chat",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    Text(
+                        text = "VitalMind AI",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        aiViewModel.clearHistory()
+                        aiViewModel.clearUserMessage()
+                        showSuggestions = true
+                    }) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Clear chat",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
@@ -364,7 +332,7 @@ fun VitalMindAIScreen(
                                     modifier = Modifier.size(56.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Refresh,
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
                                         contentDescription = "Send",
                                         modifier = Modifier.size(24.dp)
                                     )
