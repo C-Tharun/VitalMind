@@ -175,6 +175,36 @@ sealed class NotificationEvent {
         override val message = "$timeOfDay is a great time for activity. $reason"
         override val type = "ACTIVITY_SUGGESTION"
     }
+
+    // 🌅 DAILY GOAL REMINDERS
+    data class MorningMotivation(
+        val goalSteps: Int,
+        val userName: String = ""
+    ) : NotificationEvent() {
+        override val severity = NotificationSeverity.MEDIUM
+        override val title = "Ready for Today?"
+        override val message = if (userName.isNotEmpty()) {
+            "Good morning $userName! Your goal is $goalSteps steps today. Let's make it happen! 💪"
+        } else {
+            "Good morning! Your goal is $goalSteps steps today. Let's make it happen! 💪"
+        }
+        override val type = "MORNING_MOTIVATION"
+    }
+
+    data class EveningGoalPush(
+        val currentSteps: Int,
+        val goalSteps: Int,
+        val remaining: Int
+    ) : NotificationEvent() {
+        override val severity = NotificationSeverity.MEDIUM
+        override val title = if (remaining > 0) "Push to Finish Strong!" else "Goal Achieved! 🎉"
+        override val message = if (remaining > 0) {
+            "You're at $currentSteps/$goalSteps steps. Just $remaining steps to go! You can do it!"
+        } else {
+            "Amazing! You've reached your goal of $goalSteps steps today! 🌟"
+        }
+        override val type = "EVENING_GOAL_PUSH"
+    }
 }
 
 /**

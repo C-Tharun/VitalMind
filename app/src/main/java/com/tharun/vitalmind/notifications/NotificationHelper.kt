@@ -210,7 +210,9 @@ class NotificationHelper(private val context: Context) {
 
             is NotificationEvent.StepGoalNearby,
             is NotificationEvent.InactivityReminder,
-            is NotificationEvent.SleepDebtAccumulating -> CHANNEL_REMINDERS
+            is NotificationEvent.SleepDebtAccumulating,
+            is NotificationEvent.MorningMotivation,
+            is NotificationEvent.EveningGoalPush -> CHANNEL_REMINDERS
 
             is NotificationEvent.WeatherSuggestion,
             is NotificationEvent.ActivitySuggestion -> CHANNEL_SUGGESTIONS
@@ -250,7 +252,9 @@ class NotificationHelper(private val context: Context) {
             // Blue for reminders
             is NotificationEvent.StepGoalNearby,
             is NotificationEvent.InactivityReminder,
-            is NotificationEvent.SleepDebtAccumulating -> 0xFF64B5F6.toInt() // Light Blue
+            is NotificationEvent.SleepDebtAccumulating,
+            is NotificationEvent.MorningMotivation,
+            is NotificationEvent.EveningGoalPush -> 0xFF64B5F6.toInt() // Light Blue
 
             // Teal for suggestions
             is NotificationEvent.WeatherSuggestion,

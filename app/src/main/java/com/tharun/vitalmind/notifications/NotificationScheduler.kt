@@ -14,6 +14,99 @@ object NotificationScheduler {
     private const val TAG = "NotificationScheduler"
     private const val DAILY_WORK_NAME = "daily_health_notification"
     private const val PERIODIC_WORK_NAME = "periodic_health_notification"
+    private const val MORNING_REMINDER_WORK_NAME = "morning_goal_reminder"
+    private const val EVENING_REMINDER_WORK_NAME = "evening_goal_reminder"
+
+    /**
+     * Schedule all daily notifications (morning, evening, and health checks)
+     */
+    fun scheduleAllDailyNotifications(context: Context) {
+        scheduleMorningGoalReminder(context)
+        scheduleEveningGoalReminder(context)
+        scheduleDailyNotification(context)
+        Log.d(TAG, "✅ All daily notifications scheduled!")
+    }
+
+    /**
+     * Schedule morning goal motivation (9 AM)
+     */
+    fun scheduleMorningGoalReminder(context: Context) {
+        scheduleNotificationAt(
+            context = context,
+            hour = 9,
+            minute = 0,
+            workName = MORNING_REMINDER_WORK_NAME,
+            tag = "morning_reminder",
+            notificationType = "morning_motivation"
+        )
+    }
+
+    /**
+     * Schedule evening goal push (7 PM)
+     */
+    fun scheduleEveningGoalReminder(context: Context) {
+        scheduleNotificationAt(
+            context = context,
+            hour = 19,
+            minute = 0,
+            workName = EVENING_REMINDER_WORK_NAME,
+            tag = "evening_reminder",
+            notificationType = "evening_goal_push"
+        )
+    }
+
+    /**
+     * Generic function to schedule a notification at a specific time
+     */
+    private fun scheduleNotificationAt(
+        context: Context,
+        hour: Int,
+        minute: Int,
+        workName: String,
+        tag: String,
+        notificationType: String
+    ) {
+        val currentDate = Calendar.getInstance()
+        val dueDate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // If it's already past the scheduled time, schedule for tomorrow
+        if (dueDate.before(currentDate)) {
+            dueDate.add(Calendar.DAY_OF_MONTH, 1)
+        }
+
+        val timeDiff = dueDate.timeInMillis - currentDate.timeInMillis
+        val hoursUntil = timeDiff / 1000 / 60 / 60
+        val minutesUntil = (timeDiff / 1000 / 60) % 60
+
+        Log.d(TAG, "Scheduling $notificationType:")
+        Log.d(TAG, "  Scheduled for: ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(dueDate.time)}")
+        Log.d(TAG, "  Time until: ${hoursUntil}h ${minutesUntil}m")
+
+        val constraints = Constraints.Builder().build()
+
+        val inputData = Data.Builder()
+            .putBoolean("bypass_cooldown", true)
+            .putString("notification_type", notificationType)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<HealthNotificationWorker>()
+            .setInitialDelay(timeDiff, TimeUnit.MILLISECONDS)
+            .setConstraints(constraints)
+            .setInputData(inputData)
+            .addTag(tag)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            workName,
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+    }
 
     /**
      * Schedule daily notification check at 7 PM

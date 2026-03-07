@@ -43,13 +43,19 @@ class HealthNotificationWorker(
 
             // Check if this is a test run (bypass cooldown)
             val bypassCooldown = inputData.getBoolean("bypass_cooldown", false)
+            val notificationType = inputData.getString("notification_type")
+
             if (bypassCooldown) {
                 Log.d(TAG, "🧪 TEST MODE: Cooldown bypass enabled")
+            }
+            if (notificationType != null) {
+                Log.d(TAG, "📬 Notification Type: $notificationType")
             }
 
             // Get user ID from preferences
             val prefs = applicationContext.getSharedPreferences("vitalmind_prefs", Context.MODE_PRIVATE)
             val userId = prefs.getString("user_id", null)
+            val userName = prefs.getString("user_name", "") ?: ""
 
             if (userId == null) {
                 Log.w(TAG, "❌ No user ID found in SharedPreferences, skipping notification check")
@@ -58,6 +64,18 @@ class HealthNotificationWorker(
             }
 
             Log.d(TAG, "✅ User ID found: $userId")
+
+            // Handle specific notification types
+            when (notificationType) {
+                "morning_motivation" -> {
+                    handleMorningMotivation(userId, userName)
+                    return@withContext Result.success()
+                }
+                "evening_goal_push" -> {
+                    handleEveningGoalPush(userId)
+                    return@withContext Result.success()
+                }
+            }
 
             // Check notification settings
             val settingsPrefs = applicationContext.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
@@ -100,7 +118,9 @@ class HealthNotificationWorker(
 
                     is NotificationEvent.StepGoalNearby,
                     is NotificationEvent.InactivityReminder,
-                    is NotificationEvent.SleepDebtAccumulating -> remindersEnabled
+                    is NotificationEvent.SleepDebtAccumulating,
+                    is NotificationEvent.MorningMotivation,
+                    is NotificationEvent.EveningGoalPush -> remindersEnabled
 
                     is NotificationEvent.WeatherSuggestion,
                     is NotificationEvent.ActivitySuggestion -> suggestionsEnabled
@@ -311,6 +331,71 @@ class HealthNotificationWorker(
         val notificationDao = database.notificationHistoryDao()
         val cutoffTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
         notificationDao.cleanupOldNotifications(cutoffTime)
+    }
+
+    /**
+     * Handle morning motivation notification
+     */
+    private suspend fun handleMorningMotivation(userId: String, userName: String) {
+        val settingsPrefs = applicationContext.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        val remindersEnabled = settingsPrefs.getBoolean("reminders_enabled", true)
+
+        if (!remindersEnabled) {
+            Log.d(TAG, "Goal reminders disabled, skipping morning motivation")
+            return
+        }
+
+        // Get user's step goal from SharedPreferences
+        val prefs = applicationContext.getSharedPreferences("activity_goals", Context.MODE_PRIVATE)
+        val stepsGoal = prefs.getInt("steps_goal", 8000)
+
+        val event = NotificationEvent.MorningMotivation(
+            goalSteps = stepsGoal,
+            userName = userName
+        )
+
+        Log.d(TAG, "🌅 Sending morning motivation notification")
+        notificationHelper.showNotification(event)
+        recordNotification(userId, event)
+    }
+
+    /**
+     * Handle evening goal push notification
+     */
+    private suspend fun handleEveningGoalPush(userId: String) {
+        val settingsPrefs = applicationContext.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        val remindersEnabled = settingsPrefs.getBoolean("reminders_enabled", true)
+
+        if (!remindersEnabled) {
+            Log.d(TAG, "Goal reminders disabled, skipping evening goal push")
+            return
+        }
+
+        // Get today's steps and goal
+        val healthDao = database.healthDataDao()
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val todayStart = cal.timeInMillis
+
+        val todayData = healthDao.getHealthDataSince(userId, todayStart).first()
+        val currentSteps = todayData.mapNotNull { it.steps }.sum()
+
+        val prefs = applicationContext.getSharedPreferences("activity_goals", Context.MODE_PRIVATE)
+        val goalSteps = prefs.getInt("steps_goal", 8000)
+        val remaining = maxOf(0, goalSteps - currentSteps)
+
+        val event = NotificationEvent.EveningGoalPush(
+            currentSteps = currentSteps,
+            goalSteps = goalSteps,
+            remaining = remaining
+        )
+
+        Log.d(TAG, "🌆 Sending evening goal push notification (Steps: $currentSteps/$goalSteps)")
+        notificationHelper.showNotification(event)
+        recordNotification(userId, event)
     }
 }
 
